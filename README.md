@@ -1,3 +1,4 @@
+
 # 🚶‍♂️ Web-Based JuPedSim
 
 > **An interactive web-based visualization tool for pedestrian dynamics simulations**
@@ -32,7 +33,7 @@ Transform complex pedestrian flow analysis into intuitive, interactive experienc
 
 ## 🏗️ Architecture
 
-\`\`\`
+```
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
 │   Frontend      │    │   Backend       │    │   Simulation    │
 │  (React.js)     │◄──►│   (FastAPI)     │◄──►│   (JuPedSim)    │
@@ -41,7 +42,7 @@ Transform complex pedestrian flow analysis into intuitive, interactive experienc
 │ • Canvas        │    │ • WebSocket     │    │ • Pathfinding   │
 │ • Visualization │    │ • Data Processing│    │ • Agent Logic   │
 └─────────────────┘    └─────────────────┘    └─────────────────┘
-\`\`\`
+```
 
 ### 🔄 **Data Flow**
 1. **Design Phase**: User creates geometry using interactive tools
@@ -54,37 +55,37 @@ Transform complex pedestrian flow analysis into intuitive, interactive experienc
 
 ### 📋 Prerequisites
 
-\`\`\`bash
+```bash
 # System Requirements
 Node.js >= 18.0.0
 Python >= 3.10
 Git
 4GB+ RAM (8GB recommended)
-\`\`\`
+```
 
 ### ⚡ One-Command Setup
 
-\`\`\`bash
+```bash
 # Clone and setup everything
 git clone https://github.com/Hossam-Shehadeh/Web-Based-Jupedsim.git
 cd Web-Based-Jupedsim
 chmod +x setup.sh && ./setup.sh
-\`\`\`
+```
 
 ### 🔧 Manual Setup
 
 #### 1. **Environment Configuration**
-\`\`\`bash
+```bash
 # Create environment files
 cp .env.example .env.local
 cp backend/.env.example backend/.env
 
 # Edit configuration
 nano .env.local
-\`\`\`
+```
 
 #### 2. **Backend Setup**
-\`\`\`bash
+```bash
 cd backend
 
 # Create virtual environment
@@ -96,16 +97,16 @@ pip install -r requirements.txt
 
 # Start backend server
 python main.py
-\`\`\`
+```
 
 #### 3. **Frontend Setup**
-\`\`\`bash
+```bash
 # Install dependencies
 npm install
 
 # Start development server
 npm run dev
-\`\`\`
+```
 
 #### 4. **Access Application**
 - 🌐 **Frontend**: http://localhost:3000
@@ -168,123 +169,114 @@ npm run dev
 ## 🔧 Development
 
 ### 📁 **Project Structure**
-\`\`\`
+```plaintext
 jupedsim-web/
-├── 📁 app/                    # Next.js app directory
-│   ├── 📁 api/               # API routes
-│   ├── 📁 simulation/        # Main simulation page
-│   └── 📄 globals.css        # Global styles
-├── 📁 components/            # React components
-│   ├── 📁 ui/               # shadcn/ui components
-│   ├── 📄 canvas.tsx        # Main simulation canvas
-│   ├── 📄 simulation-*.tsx  # Simulation components
-│   └── 📄 visualization-*.tsx # Analysis components
-├── 📁 backend/              # Python backend
-│   ├── 📄 main.py          # FastAPI application
-│   ├── 📁 services/        # Business logic
-│   ├── 📁 models/          # Data models
-│   └── 📁 tests/           # Test files
-├── 📁 utils/               # Utility functions
-├── 📁 types/               # TypeScript definitions
-├── 📁 docs/                # Documentation
-└── 📁 scripts/             # Build and deployment scripts
-\`\`\`
+├── app/                  # Next.js app directory
+│   ├── api/              # API routes
+│   ├── simulation/       # Main simulation page
+│   └── globals.css       # Global styles
+├── components/           # React components
+│   ├── ui/               # shadcn/ui components
+│   ├── canvas.tsx        # Main simulation canvas
+│   ├── simulation-*.tsx  # Simulation components
+│   └── visualization-*.tsx # Analysis components
+├── backend/              # Python backend
+│   ├── main.py           # FastAPI application
+│   ├── services/         # Business logic
+│   ├── models/           # Data models
+│   └── tests/            # Test files
+├── utils/                # Utility functions
+├── types/                # TypeScript definitions
+├── docs/                 # Documentation
+└── scripts/              # Build and deployment scripts
+```
 
 ### 🧪 **Testing**
 
-\`\`\`bash
+```bash
 # Frontend tests
-npm run test              # Run all tests
-npm run test:watch        # Watch mode
-npm run test:coverage     # Coverage report
-npm run test:e2e          # End-to-end tests
+npm run test
+npm run test:watch
+npm run test:coverage
+npm run test:e2e
 
 # Backend tests
 cd backend
-pytest                    # Run all tests
-pytest --cov=backend      # With coverage
-pytest tests/unit/        # Unit tests only
-pytest tests/integration/ # Integration tests only
-\`\`\`
+pytest
+pytest --cov=backend
+pytest tests/unit/
+pytest tests/integration/
+```
 
 ### 🎨 **Code Quality**
 
-\`\`\`bash
-# Linting and formatting
-npm run lint              # Check code style
-npm run lint:fix          # Fix issues automatically
-npm run format            # Format code with Prettier
-npm run type-check        # TypeScript validation
+```bash
+# Frontend
+npm run lint
+npm run lint:fix
+npm run format
+npm run type-check
 
-# Python code quality
+# Backend
 cd backend
-black .                   # Format Python code
-isort .                   # Sort imports
-flake8 .                  # Lint Python code
-mypy .                    # Type checking
-\`\`\`
+black .
+isort .
+flake8 .
+mypy .
+```
 
 ### 🔄 **Development Workflow**
 
 1. **Create Feature Branch**: `git checkout -b feature/amazing-feature`
-2. **Write Code**: Implement your feature with tests
-3. **Quality Check**: Run linting, formatting, and tests
-4. **Commit Changes**: Use conventional commit messages
-5. **Push & PR**: Create pull request with description
-6. **Code Review**: Address feedback from reviewers
-7. **Merge**: Squash and merge when approved
+2. **Write Code**
+3. **Quality Check**
+4. **Commit Changes**
+5. **Push & PR**
+6. **Code Review**
+7. **Merge**
 
 ## 🚀 Deployment
 
 ### 🐳 **Docker Deployment**
 
-\`\`\`bash
-# Quick start with Docker Compose
+```bash
 docker-compose up --build
-
-# Or build individual containers
 docker build -t jupedsim-frontend .
 docker build -t jupedsim-backend ./backend
-
-# Run containers
 docker run -p 3000:3000 jupedsim-frontend
 docker run -p 8000:8000 jupedsim-backend
-\`\`\`
+```
 
 ### ☁️ **Cloud Deployment**
 
 #### **Vercel (Frontend)**
-\`\`\`bash
-# Install Vercel CLI
-npm i -g vercel
 
-# Deploy
+```bash
+npm i -g vercel
 vercel --prod
-\`\`\`
+```
 
 #### **Railway/Render (Backend)**
-1. Connect GitHub repository
-2. Set environment variables
-3. Configure build commands
-4. Deploy automatically
+- Connect GitHub repository
+- Set environment variables
+- Configure build commands
+- Deploy
 
 ### 🔧 **Environment Variables**
 
 #### **Frontend (.env.local)**
-\`\`\`bash
+```bash
 NEXT_PUBLIC_API_URL=http://localhost:8000
 NEXT_PUBLIC_BACKEND_URL=http://localhost:8000
 NEXT_PUBLIC_WS_URL=ws://localhost:8000/ws
 NODE_ENV=development
-\`\`\`
+```
 
 #### **Backend (.env)**
-\`\`\`bash
+```bash
 CORS_ORIGINS=["http://localhost:3000"]
 DEBUG=true
 SECRET_KEY=your-secret-key-here
 DATABASE_URL=sqlite:///./simulation.db
 REDIS_URL=redis://localhost:6379
-\`\`\`
-
-
+```
