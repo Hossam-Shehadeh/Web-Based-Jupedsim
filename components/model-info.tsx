@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useSimulation } from "./SimulationContext"
+import { useSimulation } from "./simulation-context"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,

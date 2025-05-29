@@ -15,7 +15,7 @@ import {
   Trash,
   Move,
 } from "lucide-react"
-import { useSimulation, type GeometryType } from "./SimulationContext"
+import { useSimulation, type GeometryType } from "./simulation-context"
 import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -161,7 +161,7 @@ export default function Sidebar() {
                 <div className="flex items-center space-x-2 rounded-md border p-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700">
                   <RadioGroupItem value="STREET_LINE" id="street-lines" />
                   <Label htmlFor="street-lines" className="cursor-pointer">
-                    Street Lines
+                    Straight Lines
                   </Label>
                 </div>
                 <div className="flex items-center space-x-2 rounded-md border p-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700">

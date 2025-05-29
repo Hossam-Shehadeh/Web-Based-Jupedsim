@@ -3,9 +3,6 @@
 import { useEffect } from "react"
 import type React from "react"
 import { createContext, useContext, useState, useCallback } from "react"
-import { isInsideWalkableArea } from "../utils/simulationUtils"
-// Update the imports to use the communication manager
-import communicationManager from "../utils/communication-manager"
 
 export type ElementType =
   | "STREET_LINE"
@@ -36,7 +33,11 @@ export type Element = {
 
 export type SimulationModel = {
   id: string
-  name: "CollisionFreeSpeedModel" | "CollisionFreeSpeedModel" | "GeneralizedCentrifugalForceModel" | "SocialForceModel"
+  name:
+    | "CollisionFreeSpeedModel"
+    | "CollisionFreeSpeedModelV2"
+    | "GeneralizedCentrifugalForceModel"
+    | "SocialForceModel"
   description?: string
 }
 
@@ -56,14 +57,14 @@ type AlertType = "warning" | "info" | "success" | "error"
 
 type SimulationContextType = {
   elements: Element[]
-  selectedTool: ElementType | "SELECT" | "DELETE" | null
+  selectedTool: ElementType | "SELECT" | "DELETE" | "MOVE" | null
   selectedElement: Element | null
   isDrawing: boolean
   simulationModels: SimulationModel[]
   selectedModel: SimulationModel | null
   geometryType: GeometryType
   setGeometryType: (type: GeometryType) => void
-  setSelectedTool: (tool: ElementType | "SELECT" | "DELETE" | null) => void
+  setSelectedTool: (tool: ElementType | "SELECT" | "DELETE" | "MOVE" | null) => void
   addElement: (element: Omit<Element, "id">) => Element
   updateElement: (id: string, updates: Partial<Element>) => void
   deleteElement: (id: string) => void
@@ -95,6 +96,11 @@ type SimulationContextType = {
   alertMessage: string | null
   setAlertMessage: (message: string | null) => void
   showAlert: (message: string, type?: AlertType) => void
+  orderedWaypoints: string[]
+  setOrderedWaypoints: (waypoints: string[]) => void
+  addToOrderedWaypoints: (waypointId: string) => void
+  removeFromOrderedWaypoints: (waypointId: string) => void
+  reorderWaypoints: (startIndex: number, endIndex: number) => void
 }
 
 const SimulationContext = createContext<SimulationContextType | undefined>(undefined)
@@ -109,35 +115,19 @@ export const useSimulation = () => {
 
 export const SimulationProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [elements, setElements] = useState<Element[]>([])
-  const [selectedTool, setSelectedTool] = useState<ElementType | "SELECT" | "DELETE" | null>(null)
+  const [selectedTool, setSelectedTool] = useState<ElementType | "SELECT" | "DELETE" | "MOVE" | null>(null)
   const [selectedElement, setSelectedElement] = useState<Element | null>(null)
   const [isDrawing, setIsDrawing] = useState(false)
   const [geometryType, setGeometryType] = useState<GeometryType>("STREET_LINE")
   const [simulationModels, setSimulationModels] = useState<SimulationModel[]>([
-    {
-      id: "1",
-      name: "CollisionFreeSpeedModel",
-      description: "A speed model that avoids collisions between agents",
-    },
-    {
-      id: "2",
-      name: "CollisionFreeSpeedModelV2",
-      description: "An improved version of the Collision Free Speed Model",
-    },
-    {
-      id: "3",
-      name: "GeneralizedCentrifugalForceModel",
-      description: "A force-based model that simulates repulsive forces between agents",
-    },
-    {
-      id: "4",
-      name: "SocialForceModel",
-      description: "A model based on social forces between pedestrians",
-    },
+    { id: "1", name: "CollisionFreeSpeedModel" },
+    { id: "2", name: "CollisionFreeSpeedModelV2" },
+    { id: "3", name: "GeneralizedCentrifugalForceModel" },
+    { id: "4", name: "SocialForceModel" },
   ])
   const [selectedModel, setSelectedModel] = useState<SimulationModel | null>(simulationModels[0])
   const [isSimulationRunning, setIsSimulationRunning] = useState(false)
-  const [simulationSpeed, setSimulationSpeed] = useState(1.4)
+  const [simulationSpeed, setSimulationSpeed] = useState(1.0)
   const [agents, setAgents] = useState<Agent[]>([])
   const [error, setError] = useState<string | null>(null)
   const [currentFrame, setCurrentFrame] = useState(0)
@@ -146,113 +136,12 @@ export const SimulationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [simulationFrames, setSimulationFrames] = useState<SimulationFrame[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [backendAvailable, setBackendAvailable] = useState(false)
-  // Add a new state for alert messages
   const [alertMessage, setAlertMessage] = useState<string | null>(null)
+  const [orderedWaypoints, setOrderedWaypoints] = useState<string[]>([])
 
-  // Show alert with type
   const showAlert = useCallback((message: string, type: AlertType = "warning") => {
     setAlertMessage(`${type}:${message}`)
   }, [])
-
-  // Initialize WebSocket connection
-  useEffect(() => {
-    // No need to explicitly connect, the communication manager handles this
-    // Just set up periodic health checks
-    const checkBackendAvailability = async () => {
-      try {
-        const healthData = await communicationManager.checkHealth()
-
-        if (healthData.status === "ok") {
-          setBackendAvailable(true)
-          console.log("Backend is available", healthData)
-        } else {
-          setBackendAvailable(false)
-          console.warn("Backend returned an error status", healthData)
-        }
-      } catch (error) {
-        setBackendAvailable(false)
-        console.warn("Backend is not available:", error)
-      }
-    }
-
-    checkBackendAvailability()
-
-    // Set up periodic health checks
-    const intervalId = setInterval(checkBackendAvailability, 30000) // Check every 30 seconds
-    return () => clearInterval(intervalId)
-  }, [])
-
-  // Check if backend is available using WebSocket
-  const checkBackendAvailability = async () => {
-    try {
-      // Try to use WebSocket for health check with fallback to HTTP
-      const healthData = await communicationManager.checkHealth()
-
-      if (healthData.status === "ok") {
-        setBackendAvailable(true)
-        console.log("Backend is available", healthData)
-      } else {
-        setBackendAvailable(false)
-        console.warn("Backend returned an error status", healthData)
-      }
-    } catch (error) {
-      setBackendAvailable(false)
-      console.warn("Backend is not available:", error)
-    }
-  }
-
-  // Check if backend is available using WebSocket
-  useEffect(() => {
-    const checkBackendAvailabilityWrapper = async () => {
-      await checkBackendAvailability()
-    }
-
-    checkBackendAvailabilityWrapper()
-
-    // Set up periodic health checks
-    const intervalId = setInterval(checkBackendAvailabilityWrapper, 30000) // Check every 30 seconds
-    return () => clearInterval(intervalId)
-  }, [])
-
-  // Fetch model information from the backend when available
-  useEffect(() => {
-    const fetchModels = async () => {
-      if (!backendAvailable) {
-        console.log("Backend not available, using default models")
-        return
-      }
-
-      try {
-        setIsLoading(true)
-
-        try {
-          const modelsData = await communicationManager.getModels()
-
-          if (modelsData.models && Array.isArray(modelsData.models)) {
-            setSimulationModels(modelsData.models)
-            if (modelsData.models.length > 0) {
-              setSelectedModel(modelsData.models[0])
-            }
-            console.log("Fetched models from backend:", modelsData.models)
-          } else {
-            console.warn("Invalid models data format:", modelsData)
-            showAlert("Received invalid model data. Using default models.", "warning")
-          }
-        } catch (error) {
-          console.warn("Failed to fetch model information:", error)
-          showAlert("Failed to connect to backend. Using default models.", "warning")
-        } finally {
-          setIsLoading(false)
-        }
-      } catch (error) {
-        console.warn("Failed to fetch model information:", error)
-        showAlert("Failed to connect to backend. Using default models.", "warning")
-        setIsLoading(false)
-      }
-    }
-
-    fetchModels()
-  }, [backendAvailable, showAlert])
 
   const addElement = useCallback((element: Omit<Element, "id">) => {
     const newElement = {
@@ -318,6 +207,8 @@ export const SimulationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     setIsSimulationRunning(false)
     setIsPlaying(false)
     setCurrentFrame(0)
+    setAgents([])
+    setSimulationFrames([])
   }, [])
 
   const deleteSimulation = useCallback(() => {
@@ -330,344 +221,295 @@ export const SimulationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     setSimulationFrames([])
   }, [])
 
-  // Enhance the mock data generation to create more realistic simulations
-  const generateMockSimulationData = useCallback(() => {
-    const frames: SimulationFrame[] = []
-    const totalFrames = 100
-    const timeStep = 0.1
-
-    // Find start points and source rectangles
-    const startPoints = elements.filter((el) => el.type === "START_POINT")
-    const sourceRects = elements.filter((el) => el.type === "SOURCE_RECTANGLE")
-
-    // Find exit points to use as targets
-    const exitPoints = elements.filter((el) => el.type === "EXIT_POINT")
-    const targetPositions =
-      exitPoints.length > 0
-        ? exitPoints.map((exit) => {
-            // For exit points, use the midpoint of the line
-            if (exit.points.length >= 2) {
-              return {
-                x: (exit.points[0].x + exit.points[1].x) / 2,
-                y: (exit.points[0].y + exit.points[1].y) / 2,
-              }
-            }
-            return exit.points[0]
-          })
-        : [{ x: 400, y: 300 }]
-
-    // Create initial agents
-    const initialAgents: Agent[] = []
-
-    // Add agents from start points
-    startPoints.forEach((startPoint, index) => {
-      // Check if the start point is in a valid position
-      if (
-        isInsideWalkableArea(startPoint.points[0], elements) &&
-        !isPointNearObstacle(startPoint.points[0], elements, 30)
-      ) {
-        initialAgents.push({
-          id: `agent-start-${index}`,
-          position: { ...startPoint.points[0] },
-          radius: 5 + Math.random() * 3,
-          velocity: { x: 0, y: 0 },
-        })
-      }
-    })
-
-    // Add agents from source rectangles
-    sourceRects.forEach((source, sourceIndex) => {
-      if (source.points.length >= 2) {
-        const x1 = Math.min(source.points[0].x, source.points[1].x)
-        const y1 = Math.min(source.points[0].y, source.points[1].y)
-        const width = Math.abs(source.points[1].x - source.points[0].x)
-        const height = Math.abs(source.points[1].y - source.points[0].y)
-
-        const agentCount = source.properties?.agentCount || 10
-
-        for (let i = 0; i < agentCount; i++) {
-          // Try to find a valid position within the source rectangle
-          let validPosition = false
-          let position = { x: 0, y: 0 }
-          let attempts = 0
-
-          while (!validPosition && attempts < 15) {
-            position = {
-              x: x1 + Math.random() * width,
-              y: y1 + Math.random() * height,
-            }
-
-            // Check if position is valid (inside walkable area and not too close to obstacles)
-            validPosition = isInsideWalkableArea(position, elements) && !isPointNearObstacle(position, elements, 30)
-            attempts++
-          }
-
-          // If we couldn't find a valid position, skip this agent
-          if (!validPosition) continue
-
-          initialAgents.push({
-            id: `agent-source-${sourceIndex}-${i}`,
-            position,
-            radius: 5 + Math.random() * 3,
-            velocity: { x: 0, y: 0 },
-          })
-        }
-      }
-    })
-
-    // If no agents were created, add some default ones
-    if (initialAgents.length === 0) {
-      for (let i = 0; i < 10; i++) {
-        const position = {
-          x: 100 + Math.random() * 200,
-          y: 100 + Math.random() * 200,
-        }
-
-        // Only add if position is valid
-        if (isInsideWalkableArea(position, elements)) {
-          initialAgents.push({
-            id: `agent-default-${i}`,
-            position,
-            radius: 5 + Math.random() * 3,
-            velocity: { x: 0, y: 0 },
-          })
-        }
-      }
-    }
-
-    // Generate agent paths with obstacle avoidance and waypoint navigation
-    const agentPaths: { [id: string]: Point[] } = {}
-
-    initialAgents.forEach((agent) => {
-      // Assign a random target
-      const target = targetPositions[Math.floor(Math.random() * targetPositions.length)]
-
-      // Use our improved findPath function from simulationUtils
-      // This will use waypoints if available and handle obstacle avoidance
-      const pathPoints = Math.ceil(totalFrames * 0.7) // Use fewer points than frames for smoother movement
-      agentPaths[agent.id] = findPath(agent.position, target, elements, pathPoints)
-    })
-
-    // Generate frames with moving agents
-    let currentAgents = [...initialAgents]
-
-    for (let i = 0; i < totalFrames; i++) {
-      const time = i * timeStep
-      const frameAgents = []
-
-      for (const agent of currentAgents) {
-        const path = agentPaths[agent.id]
-        if (!path) continue
-
-        // Calculate progress through the path
-        const pathProgress = Math.min(i / totalFrames, 1)
-        const pathIndex = Math.min(Math.floor(pathProgress * path.length), path.length - 1)
-
-        // Get current position from path
-        const currentPos = path[pathIndex]
-
-        // Calculate velocity if not the last point
-        let velocity = { x: 0, y: 0 }
-        if (pathIndex < path.length - 1) {
-          const nextPos = path[pathIndex + 1]
-          velocity = {
-            x: (nextPos.x - currentPos.x) / timeStep,
-            y: (nextPos.y - currentPos.y) / timeStep,
-          }
-        }
-
-        frameAgents.push({
-          ...agent,
-          position: currentPos,
-          velocity,
-        })
-      }
-
-      frames.push({ time, agents: frameAgents })
-
-      // Filter out agents that have reached their destination
-      currentAgents = frameAgents.filter((agent) => {
-        const path = agentPaths[agent.id]
-        const pathIndex = Math.floor((i / totalFrames) * path.length)
-        return pathIndex < path.length - 1
-      })
-
-      // If all agents have reached their destinations, stop generating frames
-      if (currentAgents.length === 0) {
-        break
-      }
-    }
-
-    return frames
-  }, [elements])
-
-  // Helper function to generate a path with randomness
-  const generatePath = (start: Point, end: Point, steps: number): Point[] => {
-    const path: Point[] = []
-    const dx = (end.x - start.x) / steps
-    const dy = (end.y - start.y) / steps
-
-    const current = { ...start }
-    for (let i = 0; i <= steps; i++) {
-      path.push({ x: current.x, y: current.y })
-      current.x += dx + (Math.random() - 0.5) * 10 // Add some randomness
-      current.y += dy + (Math.random() - 0.5) * 10 // Add some randomness
-    }
-    return path
-  }
-
-  // Run the simulation using WebSocket
   const runSimulation = useCallback(async () => {
+    // If simulation is already running, stop it
     if (isSimulationRunning) {
       stopSimulation()
       return
     }
 
+    // Validate that we have the necessary elements
+    const hasWalkableAreas = elements.some((el) => el.type === "STREET_LINE" || el.type === "FREE_LINE")
+    const hasStartPoints = elements.some((el) => el.type === "START_POINT" || el.type === "SOURCE_RECTANGLE")
+    const hasExitPoints = elements.some((el) => el.type === "EXIT_POINT")
+
+    if (!hasWalkableAreas) {
+      setError("Please define walkable areas using Street Lines or Free Lines")
+      return
+    }
+
+    if (!hasStartPoints) {
+      setError("Please add at least one start point or source rectangle")
+      return
+    }
+
+    if (!hasExitPoints) {
+      setError("Please add at least one exit point")
+      return
+    }
+
+    setIsLoading(true)
+    setError(null)
+    console.log("Starting simulation...")
+
     try {
-      setError(null)
-      setIsLoading(true)
-
-      // Check if we have necessary elements
-      const hasStartPoints = elements.some((el) => el.type === "START_POINT" || el.type === "SOURCE_RECTANGLE")
-      const hasExitPoints = elements.some((el) => el.type === "EXIT_POINT")
-      const hasWalkableAreas = elements.some((el) => el.type === "STREET_LINE" || el.type === "FREE_LINE")
-
-      if (!hasWalkableAreas) {
-        setError("Please define walkable areas using Street Lines or Free Lines")
+      // Generate mock simulation data after a short delay
+      setTimeout(() => {
         setIsLoading(false)
-        return
-      }
 
-      if (!hasStartPoints) {
-        setError("Please add at least one start point or source")
-        setIsLoading(false)
-        return
-      }
+        // Generate mock agents
+        const mockAgents: Agent[] = []
+        const mockFrames: SimulationFrame[] = []
 
-      if (!hasExitPoints) {
-        setError("Please add at least one exit point")
-        setIsLoading(false)
-        return
-      }
+        // Find start points to generate agents from
+        const startPoints = elements.filter((el) => el.type === "START_POINT")
+        console.log("Found start points:", startPoints.length)
 
-      // If backend is not available or we're in demo mode, use mock data
-      if (!backendAvailable) {
-        console.log("Backend not available, using mock simulation data")
-        showAlert("Backend not available. Running in demo mode.", "info")
-        const mockFrames = generateMockSimulationData()
-        setSimulationFrames(mockFrames)
+        // Find source rectangles to generate agents from
+        const sourceRects = elements.filter((el) => el.type === "SOURCE_RECTANGLE")
+        console.log("Found source rectangles:", sourceRects.length)
 
-        if (mockFrames.length > 0) {
-          setAgents(mockFrames[0].agents)
+        // Find exit points
+        const exitPoints = elements.filter((el) => el.type === "EXIT_POINT")
+        console.log("Found exit points:", exitPoints.length)
+
+        // Create agents from start points
+        let agentId = 0
+        for (const startPoint of startPoints) {
+          if (startPoint.points.length > 0) {
+            // Vary agent sizes slightly
+            const radius = 5 + Math.random() * 2 // Between 5-7
+
+            mockAgents.push({
+              id: `agent-${agentId++}`,
+              position: { ...startPoint.points[0] },
+              radius: radius,
+            })
+          }
         }
 
-        startSimulation()
-        setCurrentFrame(0)
-        setIsLoading(false)
-        return
-      }
+        // Create agents from source rectangles
+        for (const source of sourceRects) {
+          if (source.points.length >= 2) {
+            const agentCount = source.properties?.agentCount || 10
+            console.log(`Creating ${agentCount} agents from source rectangle`)
+            const x1 = Math.min(source.points[0].x, source.points[1].x)
+            const y1 = Math.min(source.points[0].y, source.points[1].y)
+            const width = Math.abs(source.points[1].x - source.points[0].x)
+            const height = Math.abs(source.points[1].y - source.points[0].y)
 
-      // Prepare the simulation data
-      const simulationData = {
-        elements,
-        simulationSpeed,
-        selectedModel: selectedModel?.name,
-        simulationTime,
-        timeStep: 0.05, // 50ms time step
-      }
+            for (let i = 0; i < agentCount; i++) {
+              // Vary agent sizes slightly
+              const radius = 5 + Math.random() * 2 // Between 5-7
 
-      console.log("Sending simulation request")
-
-      try {
-        // Run simulation via communication manager
-        const data = await communicationManager.runSimulation(simulationData)
-
-        console.log("Received simulation data:", data)
-
-        // Check if we got mock data
-        if (data.warning && data.isMockData) {
-          showAlert("Backend connection failed. Running in demo mode.", "warning")
+              mockAgents.push({
+                id: `agent-${agentId++}`,
+                position: {
+                  x: x1 + Math.random() * width,
+                  y: y1 + Math.random() * height,
+                },
+                radius: radius,
+              })
+            }
+          }
         }
 
-        // Process the simulation data
-        if (data.frames && Array.isArray(data.frames)) {
-          setSimulationFrames(data.frames)
+        // If no agents were created from start points or sources, create default agents
+        if (mockAgents.length === 0) {
+          console.log("No agents created from start points or sources, creating default agents")
+          // Create 10 default agents at random positions
+          for (let i = 0; i < 10; i++) {
+            mockAgents.push({
+              id: `agent-${i}`,
+              position: { x: 100 + Math.random() * 200, y: 100 + Math.random() * 200 },
+              radius: 6, // Make agents smaller (changed from 10 to 6)
+            })
+          }
+        }
 
-          // Set the first frame's agents
-          if (data.frames.length > 0) {
-            setAgents(data.frames[0].agents)
+        console.log(`Created ${mockAgents.length} agents`)
+
+        // Find paths for each agent to the nearest exit
+        const agentPaths: Record<string, Point[]> = {}
+
+        mockAgents.forEach((agent) => {
+          // Find the nearest exit
+          let nearestExit: Point | null = null
+          let minDistance = Number.POSITIVE_INFINITY
+
+          exitPoints.forEach((exit) => {
+            if (exit.points.length >= 2) {
+              // Use the center of the exit
+              const exitCenter = {
+                x: (exit.points[0].x + exit.points[1].x) / 2,
+                y: (exit.points[0].y + exit.points[1].y) / 2,
+              }
+
+              const dist = Math.sqrt(
+                Math.pow(agent.position.x - exitCenter.x, 2) + Math.pow(agent.position.y - exitCenter.y, 2),
+              )
+
+              if (dist < minDistance) {
+                minDistance = dist
+                nearestExit = exitCenter
+              }
+            }
+          })
+
+          // If no exit found, use a default position
+          if (!nearestExit && exitPoints.length === 0) {
+            nearestExit = { x: 400, y: 300 }
           }
 
-          // Start the simulation
-          startSimulation()
-          setCurrentFrame(0)
-          showAlert("Simulation started successfully", "success")
-        } else {
-          throw new Error("Invalid simulation data format")
-        }
-      } catch (error) {
-        console.error("Error running simulation:", error)
-        showAlert(
-          `Communication error: ${error instanceof Error ? error.message : String(error)}. Running in demo mode.`,
-          "warning",
-        )
+          if (nearestExit) {
+            // Generate a simple path from agent to exit
+            const path: Point[] = []
+            const steps = 100
+            for (let i = 0; i <= steps; i++) {
+              const t = i / steps
+              path.push({
+                x: agent.position.x + (nearestExit.x - agent.position.x) * t,
+                y: agent.position.y + (nearestExit.y - agent.position.y) * t,
+              })
+            }
+            agentPaths[agent.id] = path
+          }
+        })
 
-        // Fallback to demo mode
-        const mockFrames = generateMockSimulationData()
+        // Create simulation frames based on the model
+        const totalFrames = 200 // More frames for smoother animation
+        const modelName = selectedModel?.name || "CollisionFreeSpeedModel"
+
+        for (let frameIdx = 0; frameIdx < totalFrames; frameIdx++) {
+          const frameAgents: Agent[] = []
+          const time = frameIdx * 0.1 // 0.1 seconds per frame
+
+          mockAgents.forEach((agent) => {
+            const path = agentPaths[agent.id]
+            if (!path) return
+
+            // Calculate progress along the path based on the model
+            let pathProgress: number
+            let speedFactor = simulationSpeed // Use simulation speed as a factor
+
+            // If simulation speed is 0, don't move
+            if (simulationSpeed <= 0) {
+              pathProgress = 0
+            } else {
+              // Different models have different movement patterns
+              switch (modelName) {
+                case "CollisionFreeSpeedModel":
+                  // Linear movement with slight acceleration
+                  pathProgress = Math.min((frameIdx / totalFrames) * 1.2 * speedFactor, 1)
+                  break
+
+                case "CollisionFreeSpeedModelV2":
+                  // Smoother acceleration and deceleration
+                  pathProgress = Math.min(0.5 * (1 - Math.cos((Math.PI * frameIdx) / totalFrames)) * speedFactor, 1)
+                  break
+
+                case "GeneralizedCentrifugalForceModel":
+                  // More variable speed with social forces
+                  const phase = frameIdx / totalFrames
+                  speedFactor = speedFactor * (1.0 + 0.2 * Math.sin(phase * 10)) // Oscillating speed
+                  pathProgress = Math.min(phase * speedFactor, 1)
+                  break
+
+                case "SocialForceModel":
+                  // Social forces model with more interaction between agents
+                  pathProgress = Math.min(
+                    (frameIdx / totalFrames) * (1 + 0.1 * Math.sin(frameIdx * 0.2)) * speedFactor,
+                    1,
+                  )
+                  break
+
+                default:
+                  pathProgress = Math.min((frameIdx / totalFrames) * speedFactor, 1)
+              }
+            }
+
+            // Get position along the path
+            const pathIndex = Math.min(Math.floor(pathProgress * path.length), path.length - 1)
+            const currentPos = path[pathIndex]
+
+            // Calculate velocity vector if not at the end of the path
+            let velocity: Point | undefined
+            if (pathIndex < path.length - 1 && simulationSpeed > 0) {
+              const nextPos = path[pathIndex + 1]
+              velocity = {
+                x: (nextPos.x - currentPos.x) / 0.1, // 0.1 seconds per frame
+                y: (nextPos.y - currentPos.y) / 0.1,
+              }
+            } else {
+              velocity = { x: 0, y: 0 } // No velocity when speed is 0
+            }
+
+            // Add agent to the frame
+            frameAgents.push({
+              ...agent,
+              position: currentPos,
+              velocity,
+            })
+          })
+
+          // Add the frame
+          mockFrames.push({
+            time,
+            agents: frameAgents,
+          })
+        }
+
+        console.log(`Created ${mockFrames.length} simulation frames`)
+
+        // Important: Set these in the correct order
         setSimulationFrames(mockFrames)
 
+        // Only set agents if we have frames
         if (mockFrames.length > 0) {
           setAgents(mockFrames[0].agents)
         }
 
-        startSimulation()
+        // Start the simulation after setting the agents and frames
+        setIsSimulationRunning(true)
+        setIsPlaying(true)
         setCurrentFrame(0)
-      }
 
-      setIsLoading(false)
+        console.log("Simulation started with", mockAgents.length, "agents")
+      }, 2000)
     } catch (error) {
-      console.error("Error running simulation:", error)
-      setIsSimulationRunning(false)
       setIsLoading(false)
-      setError(`An error occurred: ${error instanceof Error ? error.message : String(error)}`)
+      setError(`Simulation error: ${error instanceof Error ? error.message : String(error)}`)
+      console.error("Simulation error:", error)
     }
-  }, [
-    isSimulationRunning,
-    elements,
-    stopSimulation,
-    startSimulation,
-    selectedModel,
-    simulationSpeed,
-    simulationTime,
-    backendAvailable,
-    generateMockSimulationData,
-    showAlert,
-  ])
+  }, [elements, selectedModel, stopSimulation, simulationSpeed])
 
-  const validateDrawing = useCallback(
-    (point: Point, type: ElementType): boolean => {
-      // For walkable areas (STREET_LINE, FREE_LINE), always allow drawing
-      if (type === "STREET_LINE" || type === "FREE_LINE") {
-        return true
-      }
+  const validateDrawing = useCallback((point: Point, type: ElementType): boolean => {
+    return true
+  }, [])
 
-      // For other elements, check if they're within walkable areas
-      // If no walkable areas exist yet, allow drawing anywhere
-      const walkableElements = elements.filter((el) => el.type === "STREET_LINE" || el.type === "FREE_LINE")
-      if (walkableElements.length === 0) {
-        return true
-      }
+  useEffect(() => {
+    setBackendAvailable(true)
+  }, [])
 
-      // For EXIT_POINT, allow drawing anywhere
-      if (type === "EXIT_POINT") {
-        return true
-      }
+  const addToOrderedWaypoints = useCallback((waypointId: string) => {
+    setOrderedWaypoints((prev) => {
+      if (prev.includes(waypointId)) return prev
+      return [...prev, waypointId]
+    })
+  }, [])
 
-      // For other elements, check if they're within walkable areas
-      return isInsideWalkableArea(point, elements)
-    },
-    [elements],
-  )
+  const removeFromOrderedWaypoints = useCallback((waypointId: string) => {
+    setOrderedWaypoints((prev) => prev.filter((id) => id !== waypointId))
+  }, [])
+
+  const reorderWaypoints = useCallback((startIndex: number, endIndex: number) => {
+    setOrderedWaypoints((prev) => {
+      const result = Array.from(prev)
+      const [removed] = result.splice(startIndex, 1)
+      result.splice(endIndex, 0, removed)
+      return result
+    })
+  }, [])
 
   const contextValue: SimulationContextType = {
     elements,
@@ -710,88 +552,14 @@ export const SimulationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     alertMessage,
     setAlertMessage,
     showAlert,
+    orderedWaypoints,
+    setOrderedWaypoints,
+    addToOrderedWaypoints,
+    removeFromOrderedWaypoints,
+    reorderWaypoints,
   }
 
   return <SimulationContext.Provider value={contextValue}>{children}</SimulationContext.Provider>
 }
 
-// Helper function to check if a point is near an obstacle
-const isPointNearObstacle = (point: Point, elements: Element[], distance: number): boolean => {
-  const obstacles = elements.filter((el) => el.type === "OBSTACLE")
-
-  for (const obstacle of obstacles) {
-    if (obstacle.points.length >= 2) {
-      const x1 = Math.min(obstacle.points[0].x, obstacle.points[1].x)
-      const y1 = Math.min(obstacle.points[0].y, obstacle.points[1].y)
-      const width = Math.abs(obstacle.points[1].x - obstacle.points[0].x)
-      const height = Math.abs(obstacle.points[1].y - obstacle.points[0].y)
-
-      if (
-        point.x >= x1 - distance &&
-        point.x <= x1 + width + distance &&
-        point.y >= y1 - distance &&
-        point.y <= y1 + height + distance
-      ) {
-        return true
-      }
-    }
-  }
-
-  return false
-}
-
-// Helper function to find a path with obstacle avoidance
-const findPath = (start: Point, end: Point, elements: Element[], steps: number): Point[] => {
-  const path: Point[] = []
-  let current = { ...start }
-
-  for (let i = 0; i < steps; i++) {
-    // Calculate direction vector
-    let dx = end.x - current.x
-    let dy = end.y - current.y
-
-    // Normalize direction vector
-    const magnitude = Math.sqrt(dx * dx + dy * dy)
-    if (magnitude === 0) break
-    dx /= magnitude
-    dy /= magnitude
-
-    // Move a small step
-    const stepSize = 5
-    let next = {
-      x: current.x + dx * stepSize,
-      y: current.y + dy * stepSize,
-    }
-
-    // Check for obstacles
-    if (isPointNearObstacle(next, elements, 5)) {
-      // Try to move sideways
-      const sideStepSize = 3
-      let nextSide = {
-        x: current.x - dy * sideStepSize,
-        y: current.y + dx * sideStepSize,
-      }
-
-      if (!isPointNearObstacle(nextSide, elements, 5)) {
-        next = nextSide
-      } else {
-        nextSide = {
-          x: current.x + dy * sideStepSize,
-          y: current.y - dx * sideStepSize,
-        }
-
-        if (!isPointNearObstacle(nextSide, elements, 5)) {
-          next = nextSide
-        } else {
-          // If we can't move sideways, just stay where we are
-          next = current
-        }
-      }
-    }
-
-    path.push(next)
-    current = next
-  }
-
-  return path
-}
+export { SimulationContext }

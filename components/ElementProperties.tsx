@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from "react"
 import { X } from "lucide-react"
-import type { Element } from "./SimulationContext"
-import { useSimulation } from "./SimulationContext"
+import type { Element } from "./simulation-context"
+import { useSimulation } from "./simulation-context"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Slider } from "@/components/ui/slider"

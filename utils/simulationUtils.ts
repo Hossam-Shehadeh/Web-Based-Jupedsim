@@ -1,215 +1,295 @@
-import type { Element, Point } from "../types/simulationTypes"
+import type { Agent, Waypoint, Obstacle } from "@/types/simulationTypes"
 
-// Check if a point is inside a polygon defined by an array of points
-export function isPointInPolygon(point: Point, polygon: Point[]): boolean {
-  if (polygon.length < 3) return false
+// Calculate repulsion force between agents to prevent overlap
+export function calculateRepulsionForce(
+  agent: Agent,
+  otherAgents: Agent[],
+  repulsionStrength = 5.0,
+  minDistance = 0.6,
+): { x: number; y: number } {
+  let forceX = 0
+  let forceY = 0
 
+  for (const other of otherAgents) {
+    if (agent.id === other.id) continue
+
+    const dx = agent.x - other.x
+    const dy = agent.y - other.y
+    const distanceSquared = dx * dx + dy * dy
+    const distance = Math.sqrt(distanceSquared)
+
+    // Apply repulsion force if agents are too close
+    if (distance < minDistance) {
+      // Normalize direction vector
+      const nx = dx / distance
+      const ny = dy / distance
+
+      // Calculate repulsion force (stronger as agents get closer)
+      const forceMagnitude = repulsionStrength * (1 - distance / minDistance)
+
+      forceX += nx * forceMagnitude
+      forceY += ny * forceMagnitude
+    }
+  }
+
+  return { x: forceX, y: forceY }
+}
+
+// Check if an agent is colliding with any obstacle
+export function isCollidingWithObstacle(agent: Agent, obstacles: Obstacle[], buffer = 0.1): boolean {
+  const agentRadius = agent.radius || 0.3
+
+  for (const obstacle of obstacles) {
+    // Check if agent is inside the obstacle
+    if (isPointInPolygon(agent.x, agent.y, obstacle.points)) {
+      return true
+    }
+
+    // Check if agent is too close to any edge of the obstacle
+    const edges = getObstacleEdges(obstacle)
+
+    for (const edge of edges) {
+      const distance = distanceToLineSegment(agent.x, agent.y, edge.x1, edge.y1, edge.x2, edge.y2)
+
+      if (distance < agentRadius + buffer) {
+        return true
+      }
+    }
+  }
+
+  return false
+}
+
+// Get all edges of an obstacle
+function getObstacleEdges(obstacle: Obstacle): { x1: number; y1: number; x2: number; y2: number }[] {
+  const edges = []
+  const points = obstacle.points
+
+  for (let i = 0; i < points.length; i++) {
+    const p1 = points[i]
+    const p2 = points[(i + 1) % points.length]
+
+    edges.push({
+      x1: p1.x,
+      y1: p1.y,
+      x2: p2.x,
+      y2: p2.y,
+    })
+  }
+
+  return edges
+}
+
+// Calculate distance from a point to a line segment
+function distanceToLineSegment(px: number, py: number, x1: number, y1: number, x2: number, y2: number): number {
+  const A = px - x1
+  const B = py - y1
+  const C = x2 - x1
+  const D = y2 - y1
+
+  const dot = A * C + B * D
+  const lenSq = C * C + D * D
+  let param = -1
+
+  if (lenSq !== 0) {
+    param = dot / lenSq
+  }
+
+  let xx, yy
+
+  if (param < 0) {
+    xx = x1
+    yy = y1
+  } else if (param > 1) {
+    xx = x2
+    yy = y2
+  } else {
+    xx = x1 + param * C
+    yy = y1 + param * D
+  }
+
+  const dx = px - xx
+  const dy = py - yy
+
+  return Math.sqrt(dx * dx + dy * dy)
+}
+
+// Check if a point is inside a polygon
+function isPointInPolygon(x: number, y: number, points: { x: number; y: number }[]): boolean {
   let inside = false
-  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
-    const xi = polygon[i].x
-    const yi = polygon[i].y
-    const xj = polygon[j].x
-    const yj = polygon[j].y
 
-    const intersect = yi > point.y !== yj > point.y && point.x < ((xj - xi) * (point.y - yi)) / (yj - yi) + xi
+  for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
+    const xi = points[i].x,
+      yi = points[i].y
+    const xj = points[j].x,
+      yj = points[j].y
+
+    const intersect = yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi
+
     if (intersect) inside = !inside
   }
 
   return inside
 }
 
-// Check if a point is inside any walkable area
-export function isInsideWalkableArea(point: Point, elements: Element[]): boolean {
-  // Get all walkable areas (STREET_LINE or FREE_LINE)
-  const walkableAreas = elements.filter((el) => el.type === "STREET_LINE" || el.type === "FREE_LINE")
+// Check if an agent has reached a waypoint
+export function hasReachedWaypoint(agent: Agent, waypoint: Waypoint, threshold = 0.5): boolean {
+  const dx = agent.x - waypoint.x
+  const dy = agent.y - waypoint.y
+  const distance = Math.sqrt(dx * dx + dy * dy)
 
-  // If there are no walkable areas, return true (allow drawing anywhere)
-  if (walkableAreas.length === 0) return true
+  return distance <= threshold
+}
 
-  // Check if the point is inside any walkable area
-  for (const area of walkableAreas) {
-    if (area.points.length < 3) continue // Need at least 3 points to form a polygon
-    if (isPointInPolygon(point, area.points)) return true
+// Get the next waypoint for an agent
+export function getNextWaypoint(agent: Agent, waypoints: Waypoint[], waypointIds: string[]): Waypoint | null {
+  if (!waypointIds || waypointIds.length === 0) {
+    return null
   }
 
-  return false
+  const nextWaypointId = waypointIds[0]
+  return waypoints.find((wp) => wp.id === nextWaypointId) || null
 }
 
-// Improve the isRectangleInWalkableArea function to check all corners
-export function isRectangleInWalkableArea(p1: Point, p2: Point, elements: Element[]): boolean {
-  const topLeft = { x: Math.min(p1.x, p2.x), y: Math.min(p1.y, p2.y) }
-  const topRight = { x: Math.max(p1.x, p2.x), y: Math.min(p1.y, p2.y) }
-  const bottomLeft = { x: Math.min(p1.x, p2.x), y: Math.max(p1.y, p2.y) }
-  const bottomRight = { x: Math.max(p1.x, p2.x), y: Math.max(p1.y, p2.y) }
+// Move agent towards a target position while avoiding obstacles
+export function moveAgentTowardsTarget(
+  agent: Agent,
+  targetX: number,
+  targetY: number,
+  obstacles: Obstacle[],
+  otherAgents: Agent[],
+  dt = 0.05,
+): void {
+  // Calculate direction to target
+  const dx = targetX - agent.x
+  const dy = targetY - agent.y
+  const distance = Math.sqrt(dx * dx + dy * dy)
 
-  // Check if all four corners are inside the walkable area
-  return (
-    isInsideWalkableArea(topLeft, elements) &&
-    isInsideWalkableArea(topRight, elements) &&
-    isInsideWalkableArea(bottomLeft, elements) &&
-    isInsideWalkableArea(bottomRight, elements)
-  )
-}
-
-// Calculate distance between two points
-export function distance(p1: Point, p2: Point): number {
-  const dx = p2.x - p1.x
-  const dy = p2.y - p1.y
-  return Math.sqrt(dx * dx + dy * dy)
-}
-
-// Find the nearest exit point to a given point
-export function findNearestExitPoint(point: Point, elements: Element[]): Point {
-  const exitPoints = elements.filter((el) => el.type === "EXIT_POINT")
-  if (exitPoints.length === 0) {
-    return { x: 0, y: 0 } // Default value if no exit points exist
+  if (distance < 0.1) {
+    // Agent has reached the target
+    return
   }
 
-  let nearestExit = exitPoints[0].points[0]
-  let minDistance = distance(point, exitPoints[0].points[0])
+  // Normalize direction
+  const dirX = dx / distance
+  const dirY = dy / distance
 
-  for (const exitPoint of exitPoints) {
-    const exitPosition = exitPoint.points[0]
-    const currentDistance = distance(point, exitPosition)
-    if (currentDistance < minDistance) {
-      minDistance = currentDistance
-      nearestExit = exitPosition
+  // Calculate repulsion force from other agents
+  const repulsionForce = calculateRepulsionForce(agent, otherAgents)
+
+  // Calculate obstacle avoidance force
+  const obstacleForce = calculateObstacleAvoidanceForce(agent, obstacles)
+
+  // Combine forces
+  const totalForceX = dirX + repulsionForce.x + obstacleForce.x
+  const totalForceY = dirY + repulsionForce.y + obstacleForce.y
+
+  // Normalize the total force
+  const totalForceMagnitude = Math.sqrt(totalForceX * totalForceX + totalForceY * totalForceY)
+
+  let moveX = 0
+  let moveY = 0
+
+  if (totalForceMagnitude > 0) {
+    const normalizedForceX = totalForceX / totalForceMagnitude
+    const normalizedForceY = totalForceY / totalForceMagnitude
+
+    // Calculate movement
+    const speed = agent.speed || 1.0
+    moveX = normalizedForceX * speed * dt
+    moveY = normalizedForceY * speed * dt
+  }
+
+  // Update agent position
+  agent.x += moveX
+  agent.y += moveY
+
+  // Ensure agent doesn't collide with obstacles after movement
+  if (isCollidingWithObstacle(agent, obstacles)) {
+    // Revert movement if collision occurs
+    agent.x -= moveX
+    agent.y -= moveY
+  }
+}
+
+// Calculate obstacle avoidance force
+function calculateObstacleAvoidanceForce(
+  agent: Agent,
+  obstacles: Obstacle[],
+  sensorRange = 2.0,
+  avoidanceStrength = 3.0,
+): { x: number; y: number } {
+  let forceX = 0
+  let forceY = 0
+
+  for (const obstacle of obstacles) {
+    const edges = getObstacleEdges(obstacle)
+
+    for (const edge of edges) {
+      const distance = distanceToLineSegment(agent.x, agent.y, edge.x1, edge.y1, edge.x2, edge.y2)
+
+      // Apply avoidance force if agent is close to an edge
+      if (distance < sensorRange) {
+        // Calculate closest point on the edge
+        const closestPoint = closestPointOnLineSegment(agent.x, agent.y, edge.x1, edge.y1, edge.x2, edge.y2)
+
+        // Calculate direction away from the edge
+        const dx = agent.x - closestPoint.x
+        const dy = agent.y - closestPoint.y
+        const edgeDistance = Math.sqrt(dx * dx + dy * dy)
+
+        if (edgeDistance > 0) {
+          // Normalize direction
+          const nx = dx / edgeDistance
+          const ny = dy / edgeDistance
+
+          // Calculate force (stronger as agent gets closer to the edge)
+          const forceMagnitude = avoidanceStrength * (1 - distance / sensorRange)
+
+          forceX += nx * forceMagnitude
+          forceY += ny * forceMagnitude
+        }
+      }
     }
   }
 
-  return nearestExit
+  return { x: forceX, y: forceY }
 }
 
-// Calculate distance from a point to a line segment
-export function distanceToLineSegment(point: Point, lineStart: Point, lineEnd: Point): number {
-  const A = point.x - lineStart.x
-  const B = point.y - lineStart.y
-  const C = lineEnd.x - lineStart.x
-  const D = lineEnd.y - lineStart.y
+// Find the closest point on a line segment
+function closestPointOnLineSegment(
+  px: number,
+  py: number,
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+): { x: number; y: number } {
+  const A = px - x1
+  const B = py - y1
+  const C = x2 - x1
+  const D = y2 - y1
 
   const dot = A * C + B * D
   const lenSq = C * C + D * D
   let param = -1
 
-  if (lenSq !== 0) param = dot / lenSq
+  if (lenSq !== 0) {
+    param = dot / lenSq
+  }
 
   let xx, yy
+
   if (param < 0) {
-    xx = lineStart.x
-    yy = lineStart.y
+    xx = x1
+    yy = y1
   } else if (param > 1) {
-    xx = lineEnd.x
-    yy = lineEnd.y
+    xx = x2
+    yy = y2
   } else {
-    xx = lineStart.x + param * C
-    yy = lineStart.y + param * D
+    xx = x1 + param * C
+    yy = y1 + param * D
   }
 
-  const dx = point.x - xx
-  const dy = point.y - yy
-  return Math.sqrt(dx * dx + dy * dy)
-}
-
-// Increase the safety margin for obstacle avoidance
-export function isPointNearObstacle(point: Point, elements: Element[], threshold = 40): boolean {
-  const obstacles = elements.filter((el) => el.type === "OBSTACLE")
-
-  for (const obstacle of obstacles) {
-    for (let i = 0; i < obstacle.points.length - 1; i++) {
-      const p1 = obstacle.points[i]
-      const p2 = obstacle.points[i + 1]
-
-      // Calculate distance from point to line segment
-      const dist = distanceToLineSegment(point, p1, p2)
-      if (dist < threshold) {
-        return true
-      }
-    }
-  }
-
-  return false
-}
-
-// Increase safety margin for collision detection
-export function checkCollision(position: Point, radius: number, elements: Element[], agents: any[]): boolean {
-  // Check for collision with obstacles - use a larger safety margin
-  const safetyMargin = 40 // Increased safety margin from 25 to 40
-  const obstacles = elements.filter((el) => el.type === "OBSTACLE")
-  for (const obstacle of obstacles) {
-    for (let i = 0; i < obstacle.points.length - 1; i++) {
-      const lineStart = obstacle.points[i]
-      const lineEnd = obstacle.points[i + 1]
-
-      // Calculate distance from point to line segment
-      const dist = distanceToLineSegment(position, lineStart, lineEnd)
-      if (dist < radius + safetyMargin) {
-        return true
-      }
-    }
-  }
-
-  // Check for collision with other agents (excluding self)
-  for (const agent of agents) {
-    const dist = distance(position, agent.position)
-    if (dist > 0 && dist < radius + agent.radius) {
-      return true
-    }
-  }
-
-  return false
-}
-
-/**
- * Generates a path from a start point to an end point with some randomness
- */
-export function generatePath(start: Point, end: Point, steps: number, randomFactor = 0.2): Point[] {
-  const path: Point[] = [start]
-  const dx = (end.x - start.x) / steps
-  const dy = (end.y - start.y) / steps
-
-  for (let i = 1; i < steps; i++) {
-    // Add some randomness to the path
-    const randomX = (Math.random() - 0.5) * randomFactor * dx * steps
-    const randomY = (Math.random() - 0.5) * randomFactor * dy * steps
-
-    path.push({
-      x: start.x + dx * i + randomX,
-      y: start.y + dy * i + randomY,
-    })
-  }
-
-  path.push(end)
-  return path
-}
-
-export function findPath(start: Point, end: Point, elements: Element[], numPoints = 20): Point[] {
-  const path: Point[] = []
-  // Implement your pathfinding logic here
-  // This is a placeholder implementation
-  for (let i = 0; i < numPoints; i++) {
-    const x = start.x + (end.x - start.x) * (i / numPoints)
-    const y = start.y + (end.y - start.y) * (i / numPoints)
-    path.push({ x, y })
-  }
-  return path
-}
-
-// Check if two line segments intersect
-export function doLineSegmentsIntersect(a: Point, b: Point, c: Point, d: Point): boolean {
-  // Calculate direction vectors
-  const r = { x: b.x - a.x, y: b.y - a.y }
-  const s = { x: d.x - c.x, y: d.y - c.y }
-
-  // Calculate determinant
-  const det = r.x * s.y - r.y * s.x
-
-  // Lines are parallel if determinant is zero
-  if (Math.abs(det) < 1e-10) return false
-
-  // Calculate parameters
-  const t = ((c.x - a.x) * s.y - (c.y - a.y) * s.x) / det
-  const u = ((c.x - a.x) * r.y - (c.y - a.y) * r.x) / det
-
-  // Check if intersection is within both line segments
-  return t >= 0 && t <= 1 && u >= 0 && u <= 1
+  return { x: xx, y: yy }
 }

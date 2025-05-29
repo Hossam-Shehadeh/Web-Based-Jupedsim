@@ -1,5 +1,14 @@
-import { LandingPage } from "@/components/landing/landing-page"
+import { redirect } from "next/navigation"
+import { WelcomePage } from "@/components/welcome-page"
 
 export default function Home() {
-  return <LandingPage />
+  // Check if the user has seen the welcome page before
+  if (typeof window !== "undefined") {
+    const hasSeenWelcome = localStorage.getItem("jupedsim-welcome-seen")
+    if (hasSeenWelcome) {
+      redirect("/simulation")
+    }
+  }
+
+  return <WelcomePage />
 }

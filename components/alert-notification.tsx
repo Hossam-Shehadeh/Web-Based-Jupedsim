@@ -2,7 +2,7 @@
 
 import { useEffect } from "react"
 import { AlertTriangle, X, Info, CheckCircle } from "lucide-react"
-import { useSimulation } from "./SimulationContext"
+import { useSimulation } from "./simulation-context"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { motion, AnimatePresence } from "framer-motion"
@@ -22,6 +22,8 @@ export function AlertNotification() {
       return { type: "success", message: alertMessage.substring(8) }
     } else if (alertMessage.startsWith("error:")) {
       return { type: "error", message: alertMessage.substring(6) }
+    } else if (alertMessage.startsWith("warning:")) {
+      return { type: "warning", message: alertMessage.substring(8) }
     } else {
       return { type: "warning", message: alertMessage }
     }

@@ -1,15 +1,10 @@
 "use client"
 
 import type React from "react"
+
 import { useRef, useState, useEffect, useCallback } from "react"
 import { useSimulation } from "./SimulationContext"
-import { Button } from "@/components/ui/button"
-import { Play, Pause, RotateCcw, Loader2, AlertTriangle, ZoomIn, ZoomOut, Home } from "lucide-react"
-import { ElementProperties } from "./element-properties"
-import type { Point, Element } from "./SimulationContext"
-import { isInsideWalkableArea, isRectangleInWalkableArea } from "../utils/simulationUtils"
-import { motion, AnimatePresence } from "framer-motion"
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import type { Point, Element } from "@/types/simulationTypes"
 
 const GRID_SIZE = 50
 
@@ -21,13 +16,10 @@ export default function SimulationCanvas() {
 
   const [scale, setScale] = useState(1)
   const [offset, setOffset] = useState({ x: 0, y: 0 })
-  const [showProperties, setShowProperties] = useState(false)
   const [isPanning, setIsPanning] = useState(false)
   const [startPan, setStartPan] = useState<{ x: number; y: number }>({ x: 0, y: 0 })
   const [currentPoints, setCurrentPoints] = useState<Point[]>([])
   const [connectingWaypoint, setConnectingWaypoint] = useState<string | null>(null)
-  const [alertMessage, setAlertMessage] = useState<string | null>(null)
-  const [showControls, setShowControls] = useState(false)
 
   // Add state for dragging elements
   const [isDragging, setIsDragging] = useState(false)
@@ -68,19 +60,6 @@ export default function SimulationCanvas() {
     selectedModel,
     setSelectedModel,
   } = useSimulation()
-
-  // Show controls when simulation is running
-  useEffect(() => {
-    if (isSimulationRunning) {
-      setShowControls(true)
-    } else {
-      // Hide controls with a delay when simulation stops
-      const timer = setTimeout(() => {
-        setShowControls(false)
-      }, 300)
-      return () => clearTimeout(timer)
-    }
-  }, [isSimulationRunning])
 
   // Convert screen coordinates to canvas coordinates
   const screenToCanvas = useCallback(
@@ -172,7 +151,6 @@ export default function SimulationCanvas() {
       if (selectedTool === "SELECT") {
         const clickedElement = findElementAtPoint(point)
         selectElement(clickedElement)
-        setShowProperties(!!clickedElement)
         return
       }
 
@@ -183,19 +161,12 @@ export default function SimulationCanvas() {
 
         // For point-based elements, create them immediately
         if (selectedTool === "START_POINT" || selectedTool === "WAYPOINT") {
-          // Only add if inside walkable area
-          if (isInsideWalkableArea(point, elements)) {
-            addElement({
-              type: selectedTool,
-              points: [point],
-              properties: {},
-            })
-            setIsDrawing(false)
-          } else {
-            // Show error or visual feedback
-            setError("Cannot place elements outside walkable areas")
-            setIsDrawing(false)
-          }
+          addElement({
+            type: selectedTool,
+            points: [point],
+            properties: {},
+          })
+          setIsDrawing(false)
         }
       }
     },
@@ -211,7 +182,6 @@ export default function SimulationCanvas() {
       deleteElement,
       selectElement,
       connectWaypoints,
-      setError,
     ],
   )
 
@@ -243,23 +213,8 @@ export default function SimulationCanvas() {
           y: p.y + dy,
         }))
 
-        // For elements that need to stay within walkable areas, validate the new position
-        let isValidMove = true
-
-        if (draggedElement.type === "START_POINT" || draggedElement.type === "WAYPOINT") {
-          // For point elements, check if the new position is inside walkable areas
-          isValidMove = isInsideWalkableArea(newPoints[0], elements)
-        } else if (draggedElement.type === "SOURCE_RECTANGLE") {
-          // For rectangles, check if all corners are inside walkable areas
-          isValidMove = isRectangleInWalkableArea(newPoints[0], newPoints[1], elements)
-        }
-
-        // Only update if the move is valid
-        if (isValidMove) {
-          // Update the element with the new points
-          updateElement(draggedElement.id, { points: newPoints })
-        }
-
+        // Update the element with the new points
+        updateElement(draggedElement.id, { points: newPoints })
         return
       }
 
@@ -291,7 +246,6 @@ export default function SimulationCanvas() {
       dragStartPos,
       elementStartPos,
       updateElement,
-      elements,
     ],
   )
 
@@ -322,26 +276,18 @@ export default function SimulationCanvas() {
         }
       } else if (selectedTool === "SOURCE_RECTANGLE" || selectedTool === "EXIT_POINT") {
         if (currentPoints.length === 2) {
-          // Check if rectangle is within walkable area
-          if (
-            selectedTool === "EXIT_POINT" ||
-            isRectangleInWalkableArea(currentPoints[0], currentPoints[1], elements)
-          ) {
-            addElement({
-              type: selectedTool,
-              points: currentPoints,
-              properties: selectedTool === "SOURCE_RECTANGLE" ? { agentCount: 10 } : {},
-            })
-          } else {
-            setError("Cannot place elements outside walkable areas")
-          }
+          addElement({
+            type: selectedTool,
+            points: currentPoints,
+            properties: selectedTool === "SOURCE_RECTANGLE" ? { agentCount: 10 } : {},
+          })
         }
       }
 
       setIsDrawing(false)
       setCurrentPoints([])
     }
-  }, [isPanning, isDrawing, selectedTool, currentPoints, addElement, setIsDrawing, elements, setError, isDragging])
+  }, [isPanning, isDrawing, selectedTool, currentPoints, addElement, setIsDrawing, isDragging])
 
   // Find element at a specific point
   const findElementAtPoint = useCallback(
@@ -443,85 +389,6 @@ export default function SimulationCanvas() {
     [elements, scale, screenToCanvas, selectedTool],
   )
 
-  // Fix the simulation controls to properly handle stopping and resetting
-  const handleSimulationError = (error: any) => {
-    console.error("Simulation error:", error)
-    setError(`Failed to run simulation: ${error instanceof Error ? error.message : String(error)}`)
-    setIsLoading(false)
-
-    // Show a more user-friendly message in the UI
-    setAlertMessage("error:The simulation encountered an error. Running in demo mode instead.")
-  }
-
-  function drawBackground(ctx: CanvasRenderingContext2D, width: number, height: number) {
-    // Draw grid background with squares
-    const gridSize = 30
-    ctx.save()
-
-    // Draw squares pattern
-    for (let x = 0; x <= width; x += gridSize) {
-      for (let y = 0; y <= height; y += gridSize) {
-        // Alternate colors for checkerboard effect
-        const isEvenRow = Math.floor(y / gridSize) % 2 === 0
-        const isEvenCol = Math.floor(x / gridSize) % 2 === 0
-
-        if ((isEvenRow && isEvenCol) || (!isEvenRow && !isEvenCol)) {
-          ctx.fillStyle = "#f9fafb" // Light square
-        } else {
-          ctx.fillStyle = "#f3f4f6" // Slightly darker square
-        }
-
-        ctx.fillRect(x, y, gridSize, gridSize)
-      }
-    }
-
-    // Draw grid lines
-    ctx.strokeStyle = "#e5e7eb" // Light gray grid lines
-    ctx.lineWidth = 0.5
-
-    // Draw vertical lines
-    for (let x = 0; x <= width; x += gridSize) {
-      ctx.beginPath()
-      ctx.moveTo(x, 0)
-      ctx.lineTo(x, height)
-      ctx.stroke()
-    }
-
-    // Draw horizontal lines
-    for (let y = 0; y <= height; y += gridSize) {
-      ctx.beginPath()
-      ctx.moveTo(0, y)
-      ctx.lineTo(width, y)
-      ctx.stroke()
-    }
-
-    // Add subtle dots at intersections
-    ctx.fillStyle = "#d1d5db"
-    for (let x = 0; x <= width; x += gridSize) {
-      for (let y = 0; y <= height; y += gridSize) {
-        ctx.beginPath()
-        ctx.arc(x, y, 1, 0, Math.PI * 2)
-        ctx.fill()
-      }
-    }
-    ctx.restore()
-  }
-
-  function drawAgents(ctx: CanvasRenderingContext2D) {
-    agents.forEach((agent) => {
-      // Draw agent as a simple circle
-      ctx.fillStyle = "rgba(255, 0, 0, 0.7)"
-      ctx.beginPath()
-      ctx.arc(agent.position.x, agent.position.y, agent.radius, 0, Math.PI * 2)
-      ctx.fill()
-
-      // Add a subtle outline
-      ctx.strokeStyle = "#cc0000"
-      ctx.lineWidth = 1 / scale
-      ctx.stroke()
-    })
-  }
-
   // Draw the canvas
   const drawCanvas = useCallback(() => {
     if (!canvasRef.current) return
@@ -533,37 +400,17 @@ export default function SimulationCanvas() {
     // Clear canvas
     ctx.clearRect(0, 0, canvas.width, canvas.height)
 
-    // Draw background with squares pattern
-    drawBackground(ctx, canvas.width, canvas.height)
-
     // Set canvas dimensions
     canvas.width = containerRef.current?.clientWidth || window.innerWidth
     canvas.height = containerRef.current?.clientHeight || window.innerHeight
+
+    // Draw background grid
+    drawGrid(ctx, canvas.width, canvas.height)
 
     // Apply transformations
     ctx.save()
     ctx.translate(offset.x, offset.y)
     ctx.scale(scale, scale)
-
-    // Draw grid
-    const gridOffsetX = offset.x % (GRID_SIZE * scale)
-    const gridOffsetY = offset.y % (GRID_SIZE * scale)
-
-    ctx.beginPath()
-    ctx.strokeStyle = "#e5e7eb"
-    ctx.lineWidth = 0.5 / scale
-
-    for (let x = gridOffsetX / scale; x < canvas.width / scale; x += GRID_SIZE) {
-      ctx.moveTo(x, 0)
-      ctx.lineTo(x, canvas.height / scale)
-    }
-
-    for (let y = gridOffsetY / scale; y < canvas.height / scale; y += GRID_SIZE) {
-      ctx.moveTo(0, y)
-      ctx.lineTo(0, canvas.height / scale)
-    }
-
-    ctx.stroke()
 
     // Draw elements
     elements.forEach((element) => {
@@ -584,10 +431,7 @@ export default function SimulationCanvas() {
           if (element.points.length > 0) {
             ctx.moveTo(element.points[0].x, element.points[0].y)
             for (let i = 1; i < element.points.length; i++) {
-              // Snap to grid
-              const snapX = Math.round(element.points[i].x / GRID_SIZE) * GRID_SIZE
-              const snapY = Math.round(element.points[i].y / GRID_SIZE) * GRID_SIZE
-              ctx.lineTo(snapX, snapY)
+              ctx.lineTo(element.points[i].x, element.points[i].y)
             }
           }
           ctx.stroke()
@@ -687,7 +531,7 @@ export default function SimulationCanvas() {
           ctx.arc(element.points[0].x, element.points[0].y, 10 / scale, 0, Math.PI * 2)
           ctx.fill()
 
-          // Draw inner circle to make it look like a cycle icon
+          // Draw inner circle
           ctx.fillStyle = "#ffffff"
           ctx.beginPath()
           ctx.arc(element.points[0].x, element.points[0].y, 5 / scale, 0, Math.PI * 2)
@@ -781,22 +625,19 @@ export default function SimulationCanvas() {
 
       switch (selectedTool) {
         case "STREET_LINE":
+        case "FREE_LINE":
           ctx.strokeStyle = "#3b82f6"
           ctx.lineWidth = 2 / scale
           ctx.moveTo(currentPoints[0].x, currentPoints[0].y)
           for (let i = 1; i < currentPoints.length; i++) {
-            // Snap to grid
-            const snapX = Math.round(currentPoints[i].x / GRID_SIZE) * GRID_SIZE
-            const snapY = Math.round(currentPoints[i].y / GRID_SIZE) * GRID_SIZE
-            ctx.lineTo(snapX, snapY)
+            ctx.lineTo(currentPoints[i].x, currentPoints[i].y)
           }
           ctx.stroke()
           break
 
-        case "FREE_LINE":
         case "OBSTACLE":
-          ctx.strokeStyle = selectedTool === "FREE_LINE" ? "#3b82f6" : "#000000"
-          ctx.lineWidth = selectedTool === "FREE_LINE" ? 2 / scale : 3 / scale
+          ctx.strokeStyle = "#000000"
+          ctx.lineWidth = 3 / scale
           ctx.moveTo(currentPoints[0].x, currentPoints[0].y)
           for (let i = 1; i < currentPoints.length; i++) {
             ctx.lineTo(currentPoints[i].x, currentPoints[i].y)
@@ -848,125 +689,29 @@ export default function SimulationCanvas() {
       }
     }
 
-    // Draw agents from the current simulation frame
-    if (isSimulationRunning) {
-      console.log("Drawing agents:", agents.length)
-
-      if (agents.length > 0) {
-        drawAgents(ctx)
-      } else {
-        console.warn("No agents to draw")
-      }
-    }
-
-    // Display simulation info
-    if (isSimulationRunning) {
-      ctx.fillStyle = "rgba(0, 0, 0, 0.7)"
-      ctx.font = `${16 / scale}px sans-serif`
-      ctx.fillText(`Speed: ${simulationSpeed.toFixed(1)} m/s`, 10 / scale, 30 / scale)
-      ctx.fillText(`Agents: ${agents.length}`, 10 / scale, 50 / scale)
-      ctx.fillText(`Time: ${simulationTime.toFixed(1)}s`, 10 / scale, 70 / scale)
-
-      if (simulationFrames.length > 0) {
-        const currentTime = simulationFrames[currentFrame]?.time || 0
-        ctx.fillText(`Frame: ${currentFrame + 1}/${simulationFrames.length}`, 10 / scale, 90 / scale)
-        ctx.fillText(`Simulation Time: ${currentTime.toFixed(2)}s`, 10 / scale, 110 / scale)
-      }
-    }
-
-    // Add model legend when simulation is running
-    if (isSimulationRunning) {
-      const legendX = canvas.width - 200 / scale
-      const legendY = 30 / scale
-      const lineHeight = 20 / scale
-
-      ctx.fillStyle = "rgba(255, 255, 255, 0.8)"
-      ctx.fillRect(legendX - 10 / scale, legendY - 10 / scale, 190 / scale, 120 / scale)
-      ctx.strokeStyle = "rgba(0, 0, 0, 0.5)"
-      ctx.lineWidth = 1 / scale
-      ctx.strokeRect(legendX - 10 / scale, legendY - 10 / scale, 190 / scale, 120 / scale)
-
-      ctx.fillStyle = "black"
-      ctx.font = `bold ${12 / scale}px sans-serif`
-      ctx.fillText("Simulation Model:", legendX, legendY)
-      ctx.font = `${12 / scale}px sans-serif`
-      ctx.fillText(selectedModel?.name || "Default", legendX, legendY + lineHeight)
-
-      // Draw model behaviors
-      ctx.fillText("Model Behaviors:", legendX, legendY + lineHeight * 3)
-
-      // Draw color indicators
-      const colorIndicatorSize = 8 / scale
-
-      ctx.fillStyle = "rgba(255, 0, 0, 0.8)"
-      ctx.fillRect(legendX, legendY + lineHeight * 4 - colorIndicatorSize / 2, colorIndicatorSize, colorIndicatorSize)
-      ctx.fillStyle = "black"
-      ctx.fillText("CollisionFree: Direct paths", legendX + colorIndicatorSize * 1.5, legendY + lineHeight * 4)
-
-      ctx.fillStyle = "rgba(0, 128, 255, 0.8)"
-      ctx.fillRect(legendX, legendY + lineHeight * 5 - colorIndicatorSize / 2, colorIndicatorSize, colorIndicatorSize)
-      ctx.fillStyle = "black"
-      ctx.fillText("CFM V2: Smooth acceleration", legendX + colorIndicatorSize * 1.5, legendY + lineHeight * 5)
-    }
-
-    // Draw cursor indicator for move tool
-    if (selectedTool === "MOVE" && !isDragging) {
-      const canvas = canvasRef.current
-      const rect = canvas.getBoundingClientRect()
-      const mouseX = (window.event as MouseEvent)?.clientX || 0
-      const mouseY = (window.event as MouseEvent)?.clientY || 0
-
-      if (mouseX >= rect.left && mouseX <= rect.right && mouseY >= rect.top && mouseY <= rect.bottom) {
-        const point = screenToCanvas(mouseX, mouseY)
-
-        // Draw a move cursor indicator
+    // Draw agents
+    if (isSimulationRunning && agents.length > 0) {
+      agents.forEach((agent) => {
+        // Draw agent body
+        ctx.fillStyle = "#ef4444"
         ctx.beginPath()
-        ctx.arc(point.x, point.y, 10 / scale, 0, Math.PI * 2)
-        ctx.fillStyle = "rgba(255, 255, 255, 0.5)"
-        ctx.fill()
-        ctx.strokeStyle = "#3b82f6"
-        ctx.lineWidth = 1.5 / scale
-        ctx.stroke()
-
-        // Draw move arrows
-        const arrowSize = 6 / scale
-
-        // Up arrow
-        ctx.beginPath()
-        ctx.moveTo(point.x, point.y - arrowSize * 2)
-        ctx.lineTo(point.x - arrowSize, point.y - arrowSize)
-        ctx.lineTo(point.x + arrowSize, point.y - arrowSize)
-        ctx.closePath()
-        ctx.fillStyle = "#3b82f6"
+        ctx.arc(agent.position.x, agent.position.y, agent.radius, 0, Math.PI * 2)
         ctx.fill()
 
-        // Down arrow
-        ctx.beginPath()
-        ctx.moveTo(point.x, point.y + arrowSize * 2)
-        ctx.lineTo(point.x - arrowSize, point.y + arrowSize)
-        ctx.lineTo(point.x + arrowSize, point.y + arrowSize)
-        ctx.closePath()
-        ctx.fillStyle = "#3b82f6"
-        ctx.fill()
-
-        // Left arrow
-        ctx.beginPath()
-        ctx.moveTo(point.x - arrowSize * 2, point.y)
-        ctx.lineTo(point.x - arrowSize, point.y - arrowSize)
-        ctx.lineTo(point.x - arrowSize, point.y + arrowSize)
-        ctx.closePath()
-        ctx.fillStyle = "#3b82f6"
-        ctx.fill()
-
-        // Right arrow
-        ctx.beginPath()
-        ctx.moveTo(point.x + arrowSize * 2, point.y)
-        ctx.lineTo(point.x + arrowSize, point.y - arrowSize)
-        ctx.lineTo(point.x + arrowSize, point.y + arrowSize)
-        ctx.closePath()
-        ctx.fillStyle = "#3b82f6"
-        ctx.fill()
-      }
+        // Draw direction indicator if moving
+        if (agent.velocity && (Math.abs(agent.velocity.x) > 0.1 || Math.abs(agent.velocity.y) > 0.1)) {
+          const angle = Math.atan2(agent.velocity.y, agent.velocity.x)
+          ctx.strokeStyle = "#ffffff"
+          ctx.lineWidth = 2
+          ctx.beginPath()
+          ctx.moveTo(agent.position.x, agent.position.y)
+          ctx.lineTo(
+            agent.position.x + Math.cos(angle) * agent.radius,
+            agent.position.y + Math.sin(angle) * agent.radius,
+          )
+          ctx.stroke()
+        }
+      })
     }
 
     ctx.restore()
@@ -981,66 +726,43 @@ export default function SimulationCanvas() {
     connectingWaypoint,
     screenToCanvas,
     isSimulationRunning,
-    simulationSpeed,
     agents,
-    simulationTime,
-    simulationFrames,
-    currentFrame,
-    selectedModel,
     isDragging,
     draggedElement,
   ])
 
-  // Update the current frame based on simulation time
-  useEffect(() => {
-    if (isSimulationRunning && isPlaying && simulationFrames.length > 0) {
-      console.log("Animation loop started with", simulationFrames.length, "frames and", agents.length)
+  // Draw grid background
+  const drawGrid = (ctx: CanvasRenderingContext2D, width: number, height: number) => {
+    const gridSize = 20
+    ctx.strokeStyle = "rgba(200, 200, 200, 0.3)"
+    ctx.lineWidth = 1
 
-      // Set initial agents if not already set
-      if (agents.length === 0 && simulationFrames[0]?.agents.length > 0) {
-        console.log("Setting initial agents from frame 0")
-        setAgents(simulationFrames[0].agents)
-      }
-
-      const frameInterval = setInterval(() => {
-        setCurrentFrame((prevFrame) => {
-          const nextFrame = prevFrame + 1
-          if (nextFrame >= simulationFrames.length) {
-            clearInterval(frameInterval)
-            return prevFrame
-          }
-
-          // Update agents with the new frame data
-          console.log(`Updating to frame ${nextFrame} with ${simulationFrames[nextFrame].agents.length} agents`)
-          setAgents(simulationFrames[nextFrame].agents)
-          return nextFrame
-        })
-      }, 100) // Update every 100ms for smooth animation
-
-      return () => clearInterval(frameInterval)
+    // Draw vertical lines
+    for (let x = 0; x <= width; x += gridSize) {
+      ctx.beginPath()
+      ctx.moveTo(x, 0)
+      ctx.lineTo(x, height)
+      ctx.stroke()
     }
-  }, [isSimulationRunning, isPlaying, simulationFrames, setAgents, setCurrentFrame, agents.length])
+
+    // Draw horizontal lines
+    for (let y = 0; y <= height; y += gridSize) {
+      ctx.beginPath()
+      ctx.moveTo(0, y)
+      ctx.lineTo(width, y)
+      ctx.stroke()
+    }
+  }
 
   // Animation loop
-  const animate = useCallback(
-    (time: number) => {
-      if (lastTimeRef.current === 0) {
-        lastTimeRef.current = time
-      }
-
-      const deltaTime = (time - lastTimeRef.current) / 1000 // Convert to seconds
-
-      lastTimeRef.current = time
-      drawCanvas()
-      animationRef.current = requestAnimationFrame(animate)
-    },
-    [drawCanvas],
-  )
+  const animate = useCallback(() => {
+    drawCanvas()
+    animationRef.current = requestAnimationFrame(animate)
+  }, [drawCanvas])
 
   // Set up animation loop
   useEffect(() => {
     animationRef.current = requestAnimationFrame(animate)
-
     return () => {
       cancelAnimationFrame(animationRef.current)
     }
@@ -1083,189 +805,17 @@ export default function SimulationCanvas() {
     [scale, screenToCanvas],
   )
 
-  // Toggle play/pause
-  const togglePlay = useCallback(() => {
-    setIsPlaying(!isPlaying)
-  }, [isPlaying, setIsPlaying])
-
-  // Reset simulation
-  const resetSimulation = useCallback(() => {
-    setCurrentFrame(0)
-    if (simulationFrames.length > 0) {
-      setAgents(simulationFrames[0].agents)
-    }
-  }, [setCurrentFrame, simulationFrames, setAgents])
-
-  // Reset view to center
-  const resetView = useCallback(() => {
-    setScale(1)
-    setOffset({ x: 0, y: 0 })
-  }, [])
-
-  // Update the simulation controls in the return statement
   return (
-    <div className="relative flex h-full flex-col">
-      {/* Zoom controls */}
-      <div className="absolute left-4 top-4 z-10 flex flex-col gap-2 bg-white/80 dark:bg-gray-800/80 p-2 rounded-lg shadow-md backdrop-blur-sm">
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button variant="outline" size="icon" onClick={() => setScale(Math.min(scale * 1.2, 10))}>
-                <ZoomIn className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="right">Zoom In</TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button variant="outline" size="icon" onClick={() => setScale(Math.max(scale * 0.8, 0.1))}>
-                <ZoomOut className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="right">Zoom Out</TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button variant="outline" size="icon" onClick={resetView}>
-                <Home className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="right">Reset View</TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      </div>
-
-      {/* Simulation controls */}
-      <AnimatePresence>
-        {showControls && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 20 }}
-            className="absolute bottom-4 right-4 z-10 bg-white dark:bg-gray-800 p-4 rounded-md shadow-lg"
-          >
-            <div className="flex flex-col gap-4">
-              <Button
-                className="bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white"
-                onClick={() => {
-                  runSimulation().catch(handleSimulationError)
-                }}
-                disabled={isLoading}
-              >
-                {isLoading ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Running Simulation...
-                  </>
-                ) : isSimulationRunning ? (
-                  <>
-                    <Pause className="mr-2 h-4 w-4" />
-                    Stop Simulation
-                  </>
-                ) : (
-                  <>
-                    <Play className="mr-2 h-4 w-4" />
-                    Run Simulation
-                  </>
-                )}
-              </Button>
-
-              {isSimulationRunning && (
-                <div className="mt-2">
-                  <select
-                    className="w-full p-2 rounded border bg-white dark:bg-gray-700"
-                    value={selectedModel?.id || ""}
-                    onChange={(e) => {
-                      const model = simulationModels.find((m) => m.id === e.target.value)
-                      if (model) {
-                        setSelectedModel(model)
-                      }
-                    }}
-                  >
-                    {simulationModels.map((model) => (
-                      <option key={model.id} value={model.id}>
-                        {model.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-              {isSimulationRunning && simulationFrames.length > 0 && (
-                <div className="flex gap-2">
-                  <Button variant="outline" onClick={togglePlay}>
-                    {isPlaying ? <Pause className="mr-2 h-4 w-4" /> : <Play className="mr-2 h-4 w-4" />}
-                    {isPlaying ? "Pause" : "Play"}
-                  </Button>
-                  <Button variant="outline" onClick={resetSimulation}>
-                    <RotateCcw className="mr-2 h-4 w-4" />
-                    Reset
-                  </Button>
-                </div>
-              )}
-
-              {isSimulationRunning && (
-                <>
-                  <div className="text-sm">
-                    <div>Time: {simulationTime.toFixed(1)}s</div>
-                    <div>Agents: {agents.length}</div>
-                    {simulationFrames.length > 0 && (
-                      <div>
-                        Frame: {currentFrame + 1}/{simulationFrames.length}
-                      </div>
-                    )}
-                  </div>
-                </>
-              )}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {alertMessage && (
-        <div
-          className="absolute top-4 left-4 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative"
-          role="alert"
-        >
-          <strong className="font-bold">
-            <AlertTriangle className="inline-block w-6 h-6 mr-2 align-middle" />
-            Error!
-          </strong>
-          <span className="block sm:inline">{alertMessage}</span>
-          <span className="absolute top-0 bottom-0 right-0 px-4 py-3">
-            <svg
-              className="fill-current h-6 w-6 text-red-500"
-              role="button"
-              xmlns="http://www.w3.org/2000/svg"
-              viewBox="0 0 20 20"
-              onClick={() => setAlertMessage(null)}
-            >
-              <title>Close</title>
-              <path d="M14.348 14.849a1.2 1.2 0 0 1-1.697 0L10 11.819l-2.651 3.029a1.2 1.2 0 1 1-1.697-1.697l2.758-3.15-2.759-3.152a1.2 1.2 0 1 1 1.697-1.697L10 8.183l2.651-3.031a1.2 1.2 0 1 1 1.697 1.697l-2.758 3.152 2.758 3.15a1.2 1.2 0 0 1 0 1.698z" />
-            </svg>
-          </span>
-        </div>
-      )}
-      <div
-        ref={containerRef}
-        className="flex-1 relative overflow-hidden"
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onDoubleClick={handleDoubleClick}
-        onWheel={handleWheel}
-      >
-        <canvas ref={canvasRef} className="absolute inset-0" />
-        {showProperties && selectedElement && (
-          <ElementProperties element={selectedElement} onClose={() => setShowProperties(false)} />
-        )}
-      </div>
+    <div
+      ref={containerRef}
+      className="relative h-full w-full overflow-hidden"
+      onMouseDown={handleMouseDown}
+      onMouseMove={handleMouseMove}
+      onMouseUp={handleMouseUp}
+      onDoubleClick={handleDoubleClick}
+      onWheel={handleWheel}
+    >
+      <canvas ref={canvasRef} className="absolute inset-0" />
     </div>
   )
 }

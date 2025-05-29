@@ -79,11 +79,7 @@ export function WelcomePage() {
               className="mx-auto mb-4 relative"
             >
               <div className="absolute -top-16 left-1/2 transform -translate-x-1/2 w-32 h-32 bg-white dark:bg-gray-800 rounded-full flex items-center justify-center shadow-lg border-4 border-blue-100 dark:border-blue-900">
-                <img
-                  src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/image-e7swAZW8WlZ6odeXFQ4C7Dinsgfbbq.png"
-                  alt="JuPedSim Logo"
-                  className="h-20 w-auto"
-                />
+                <img src="/placeholder.svg?height=80&width=80" alt="JuPedSim Logo" className="h-20 w-auto" />
               </div>
             </motion.div>
             <div className="h-10"></div>
@@ -436,7 +432,10 @@ export function WelcomePage() {
             </div>
 
             <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-              <Button onClick={handleGetStarted} className="bg-blue-600 hover:bg-blue-700 text-white gap-2">
+              <Button
+                onClick={handleGetStarted}
+                className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white gap-2"
+              >
                 Get Started
                 <ChevronRight className="h-4 w-4" />
               </Button>

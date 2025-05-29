@@ -30,13 +30,7 @@ export function Tutorial() {
       title: "Welcome to JuPedSim Web",
       description:
         "JuPedSim is a Python package with a C++ core to simulate pedestrian dynamics. Originally started in 2010 as a C++ based CLI application, it has been rewritten as a Python package for easier use.",
-      icon: (
-        <img
-          src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/image-e7swAZW8WlZ6odeXFQ4C7Dinsgfbbq.png"
-          alt="JuPedSim Logo"
-          className="h-16 w-auto"
-        />
-      ),
+      icon: <img src="/placeholder.svg?height=64&width=64" alt="JuPedSim Logo" className="h-16 w-auto" />,
     },
     {
       title: "Pedestrian Dynamics Simulation",

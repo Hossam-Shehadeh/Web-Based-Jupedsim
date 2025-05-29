@@ -113,32 +113,3 @@
   @apply bg-black text-white dark:bg-white dark:text-black;
   transform: scale(1.05);
 }
-
-/* Grid background for simulation canvas */
-.grid-background {
-  background-size: 50px 50px;
-  background-image: linear-gradient(to right, rgba(229, 231, 235, 0.5) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(229, 231, 235, 0.5) 1px, transparent 1px);
-}
-
-.dark .grid-background {
-  background-image: linear-gradient(to right, rgba(75, 85, 99, 0.5) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(75, 85, 99, 0.5) 1px, transparent 1px);
-}
-
-/* Checkerboard pattern for simulation canvas */
-.checkerboard-background {
-  background-image: linear-gradient(45deg, rgba(229, 231, 235, 0.2) 25%, transparent 25%),
-    linear-gradient(-45deg, rgba(229, 231, 235, 0.2) 25%, transparent 25%),
-    linear-gradient(45deg, transparent 75%, rgba(229, 231, 235, 0.2) 75%),
-    linear-gradient(-45deg, transparent 75%, rgba(229, 231, 235, 0.2) 75%);
-  background-size: 50px 50px;
-  background-position: 0 0, 0 25px, 25px -25px, -25px 0px;
-}
-
-.dark .checkerboard-background {
-  background-image: linear-gradient(45deg, rgba(75, 85, 99, 0.2) 25%, transparent 25%),
-    linear-gradient(-45deg, rgba(75, 85, 99, 0.2) 25%, transparent 25%),
-    linear-gradient(45deg, transparent 75%, rgba(75, 85, 99, 0.2) 75%),
-    linear-gradient(-45deg, transparent 75%, rgba(75, 85, 99, 0.2) 75%);
-}

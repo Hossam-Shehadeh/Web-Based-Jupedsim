@@ -3,15 +3,16 @@
 import type React from "react"
 
 import { useState } from "react"
-import { useSimulation } from "./SimulationContext"
+import { useSimulation } from "./simulation-context"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip"
 import { X, Info } from "lucide-react"
+import { OrderedWaypointsPanel } from "./ordered-waypoints-panel"
 
 export function PropertiesPanel() {
-  const { selectedElement, updateElement, deleteElement, selectElement } = useSimulation()
+  const { selectedElement, updateElement, deleteElement, selectElement, selectedTool } = useSimulation()
   const [agentCount, setAgentCount] = useState(selectedElement?.properties?.agentCount || 10)
 
   if (!selectedElement) return null
@@ -86,6 +87,11 @@ export function PropertiesPanel() {
               Delete
             </Button>
           </div>
+          {selectedTool === "WAYPOINT" && (
+            <div className="mt-4">
+              <OrderedWaypointsPanel />
+            </div>
+          )}
         </div>
       </div>
     </TooltipProvider>

@@ -1,5 +1,5 @@
 import logging
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Optional
 import math
 
 from models.simulation import Element, Point
@@ -13,296 +13,278 @@ class GeometryService:
     
     def validate_geometry(self, elements: List[Element]) -> None:
         """
-        Validate the geometry data from the frontend.
+        Validate geometry data for simulation.
         
         Args:
-            elements: List of elements from the frontend
+            elements: List of geometry elements
             
         Raises:
-            ValueError: If the geometry is invalid
+            ValueError: If geometry is invalid
         """
-        # Check if we have necessary elements
-        has_walkable_areas = any(el.type in ["STREET_LINE", "FREE_LINE"] for el in elements)
-        has_start_points = any(el.type in ["START_POINT", "SOURCE_RECTANGLE"] for el in elements)
-        has_exit_points = any(el.type == "EXIT_POINT" for el in elements)
+        # Check if there are any elements
+        if not elements:
+            raise ValueError("No geometry elements provided")
         
-        if not has_walkable_areas:
-            raise ValueError("No walkable areas defined. Please add street lines or free lines.")
+        # Check for required elements
+        has_source = False
+        has_exit = False
+        has_walkable_area = False
         
-        if not has_start_points:
-            raise ValueError("No start points or sources defined. Please add at least one start point or source.")
-        
-        if not has_exit_points:
-            raise ValueError("No exit points defined. Please add at least one exit point.")
-        
-        # Validate individual elements
         for element in elements:
-            if element.type in ["STREET_LINE", "FREE_LINE", "OBSTACLE"] and len(element.points) < 2:
-                raise ValueError(f"{element.type} must have at least 2 points")
-            
-            if element.type in ["SOURCE_RECTANGLE", "EXIT_POINT"] and len(element.points) != 2:
-                raise ValueError(f"{element.type} must have exactly 2 points")
-            
-            if element.type == "START_POINT" and len(element.points) != 1:
-                raise ValueError("Start point must have exactly 1 point")
-            
-            if element.type == "WAYPOINT" and len(element.points) != 1:
-                raise ValueError("Waypoint must have exactly 1 point")
+            if element.type in ["SOURCE_RECTANGLE", "START_POINT"]:
+                has_source = True
+            elif element.type == "EXIT_POINT":
+                has_exit = True
+            elif element.type in ["STREET_LINE", "FREE_LINE", "ROOM"]:
+                has_walkable_area = True
         
-        # Validate that walkable areas form closed polygons
-        for element in elements:
-            if element.type in ["STREET_LINE", "FREE_LINE"]:
-                if len(element.points) < 3:
-                    raise ValueError(f"{element.type} must have at least 3 points to form a closed polygon")
-                
-                # Check if first and last points are the same (closed polygon)
-                first_point = element.points[0]
-                last_point = element.points[-1]
-                
-                if abs(first_point.x - last_point.x) > 0.001 or abs(first_point.y - last_point.y) > 0.001:
-                    raise ValueError(f"{element.type} must form a closed polygon (first and last points must be the same)")
+        # Validate that we have at least one source and exit
+        if not has_source:
+            logger.warning("No source elements found in geometry")
         
-        logger.info(f"Geometry validation passed for {len(elements)} elements")
+        if not has_exit:
+            logger.warning("No exit points found in geometry")
+        
+        if not has_walkable_area:
+            logger.warning("No walkable areas found in geometry")
     
     def process_geometry(self, elements: List[Element]) -> Dict[str, Any]:
         """
-        Process the geometry data from the frontend into a format suitable for simulation.
+        Process geometry data into a format suitable for simulation.
         
         Args:
-            elements: List of elements from the frontend
+            elements: List of geometry elements
             
         Returns:
             Processed geometry data
         """
-        logger.info(f"Processing {len(elements)} elements")
+        logger.info(f"Processing {len(elements)} geometry elements")
         
-        # Extract walkable areas
-        walkable_areas = [el for el in elements if el.type in ["STREET_LINE", "FREE_LINE"]]
-        
-        # Extract obstacles
-        obstacles = [el for el in elements if el.type == "OBSTACLE"]
-        
-        # Extract start points and sources
-        start_points = [el for el in elements if el.type == "START_POINT"]
-        sources = [el for el in elements if el.type == "SOURCE_RECTANGLE"]
-        
-        # Extract exit points
-        exit_points = [el for el in elements if el.type == "EXIT_POINT"]
-        
-        # Extract waypoints
-        waypoints = [el for el in elements if el.type == "WAYPOINT"]
-        
-        # Process into simulation-ready format
-        processed_geometry = {
-            "rooms": self._process_walkable_areas(walkable_areas),
-            "obstacles": self._process_obstacles(obstacles),
-            "startPoints": self._process_start_points(start_points),
-            "sources": self._process_sources(sources),
-            "exitPoints": self._process_exit_points(exit_points),
-            "waypoints": self._process_waypoints(waypoints, elements)
-        }
-        
-        # Generate agents data
-        processed_geometry["agents"] = self._generate_agents(processed_geometry)
-        
-        return processed_geometry
-    
-    def _process_walkable_areas(self, walkable_areas: List[Element]) -> List[Dict[str, Any]]:
-        """
-        Process walkable areas into rooms for JuPedSim.
-        """
+        # Categorize elements
+        walkable_areas = []
+        obstacles = []
+        start_points = []
+        sources = []
+        exit_points = []
+        waypoints = []
         rooms = []
+        doors = []
         
-        for area in walkable_areas:
-            rooms.append({
-                "id": area.id,
-                "type": area.type,
-                "polygon": [{"x": p.x, "y": p.y} for p in area.points]
-            })
+        for element in elements:
+            if element.type in ["STREET_LINE", "FREE_LINE"]:
+                walkable_areas.append(self._process_walkable_area(element))
+            elif element.type == "OBSTACLE":
+                obstacles.append(self._process_obstacle(element))
+            elif element.type == "START_POINT":
+                start_points.append(self._process_start_point(element))
+            elif element.type == "SOURCE_RECTANGLE":
+                sources.append(self._process_source(element))
+            elif element.type == "EXIT_POINT":
+                exit_points.append(self._process_exit_point(element))
+            elif element.type == "WAYPOINT":
+                waypoints.append(self._process_waypoint(element))
+            elif element.type == "ROOM":
+                rooms.append(self._process_room(element))
+            elif element.type == "DOOR":
+                doors.append(self._process_door(element))
         
-        return rooms
+        # Return processed geometry
+        return {
+            "walkableAreas": walkable_areas,
+            "obstacles": obstacles,
+            "startPoints": start_points,
+            "sources": sources,
+            "exitPoints": exit_points,
+            "waypoints": waypoints,
+            "rooms": rooms,
+            "doors": doors
+        }
     
-    def _process_obstacles(self, obstacles: List[Element]) -> List[Dict[str, Any]]:
-        """
-        Process obstacles for JuPedSim.
-        """
-        processed_obstacles = []
+    def _process_walkable_area(self, element: Element) -> Dict[str, Any]:
+        """Process a walkable area element."""
+        return {
+            "id": element.id,
+            "type": element.type,
+            "points": element.points
+        }
+    
+    def _process_obstacle(self, element: Element) -> Dict[str, Any]:
+        """Process an obstacle element."""
+        return {
+            "id": element.id,
+            "type": element.type,
+            "points": element.points
+        }
+    
+    def _process_start_point(self, element: Element) -> Dict[str, Any]:
+        """Process a start point element."""
+        return {
+            "id": element.id,
+            "type": element.type,
+            "position": element.points[0] if element.points else {"x": 0, "y": 0}
+        }
+    
+    def _process_source(self, element: Element) -> Dict[str, Any]:
+        """Process a source rectangle element."""
+        agent_count = element.properties.agentCount if element.properties and element.properties.agentCount else 10
         
-        for obstacle in obstacles:
-            # Ensure obstacle forms a closed polygon
-            points = [{"x": p.x, "y": p.y} for p in obstacle.points]
+        return {
+            "id": element.id,
+            "type": element.type,
+            "rect": element.points[:2] if len(element.points) >= 2 else [{"x": 0, "y": 0}, {"x": 100, "y": 100}],
+            "agentCount": agent_count
+        }
+    
+    def _process_exit_point(self, element: Element) -> Dict[str, Any]:
+        """Process an exit point element."""
+        return {
+            "id": element.id,
+            "type": element.type,
+            "line": element.points[:2] if len(element.points) >= 2 else [{"x": 0, "y": 0}, {"x": 100, "y": 0}]
+        }
+    
+    def _process_waypoint(self, element: Element) -> Dict[str, Any]:
+        """Process a waypoint element."""
+        connections = element.properties.connections if element.properties and element.properties.connections else []
+        
+        return {
+            "id": element.id,
+            "type": element.type,
+            "position": element.points[0] if element.points else {"x": 0, "y": 0},
+            "connections": connections
+        }
+    
+    def _process_room(self, element: Element) -> Dict[str, Any]:
+        """Process a room element."""
+        name = element.properties.name if element.properties and hasattr(element.properties, "name") else f"Room {element.id}"
+        capacity = element.properties.capacity if element.properties and hasattr(element.properties, "capacity") else 100
+        
+        return {
+            "id": element.id,
+            "type": element.type,
+            "points": element.points,
+            "name": name,
+            "capacity": capacity
+        }
+    
+    def _process_door(self, element: Element) -> Dict[str, Any]:
+        """Process a door element."""
+        room_id = element.properties.roomId if element.properties and hasattr(element.properties, "roomId") else None
+        target_room_id = element.properties.targetRoomId if element.properties and hasattr(element.properties, "targetRoomId") else None
+        
+        return {
+            "id": element.id,
+            "type": element.type,
+            "points": element.points,
+            "roomId": room_id,
+            "targetRoomId": target_room_id
+        }
+    
+    def calculate_distance(self, p1: Point, p2: Point) -> float:
+        """Calculate Euclidean distance between two points."""
+        return math.sqrt((p2.x - p1.x) ** 2 + (p2.y - p1.y) ** 2)
+    
+    def is_point_in_polygon(self, point: Point, polygon: List[Point]) -> bool:
+        """Check if a point is inside a polygon using ray casting algorithm."""
+        if len(polygon) < 3:
+            return False
+        
+        inside = False
+        j = len(polygon) - 1
+        
+        for i in range(len(polygon)):
+            if ((polygon[i].y > point.y) != (polygon[j].y > point.y)) and \
+               (point.x < (polygon[j].x - polygon[i].x) * (point.y - polygon[i].y) / 
+                (polygon[j].y - polygon[i].y) + polygon[i].x):
+                inside = not inside
+            j = i
             
-            # If first and last points are not the same, close the polygon
-            if len(points) > 1:
-                first_point = points[0]
-                last_point = points[-1]
-                
-                if abs(first_point["x"] - last_point["x"]) > 0.001 or abs(first_point["y"] - last_point["y"]) > 0.001:
-                    points.append(first_point)
+        return inside
+    
+    def find_room_containing_point(self, point: Point, rooms: List[Element]) -> Optional[Element]:
+        """Find the room that contains a point."""
+        for room in rooms:
+            if self.is_point_in_polygon(point, room.points):
+                return room
+        return None
+    
+    def find_nearest_door(self, point: Point, doors: List[Element]) -> Optional[Element]:
+        """Find the nearest door to a point."""
+        if not doors:
+            return None
             
-            processed_obstacles.append({
-                "id": obstacle.id,
-                "polygon": points
-            })
-        
-        return processed_obstacles
-    
-    def _process_start_points(self, start_points: List[Element]) -> List[Dict[str, Any]]:
-        """
-        Process start points for JuPedSim.
-        """
-        processed_start_points = []
-        
-        for point in start_points:
-            if point.points:
-                processed_start_points.append({
-                    "id": point.id,
-                    "position": {"x": point.points[0].x, "y": point.points[0].y}
-                })
-        
-        return processed_start_points
-    
-    def _process_sources(self, sources: List[Element]) -> List[Dict[str, Any]]:
-        """
-        Process source rectangles for JuPedSim.
-        """
-        processed_sources = []
-        
-        for source in sources:
-            if len(source.points) == 2:
-                agent_count = source.properties.agentCount if source.properties and source.properties.agentCount else 10
-                
-                processed_sources.append({
-                    "id": source.id,
-                    "rect": [
-                        {"x": source.points[0].x, "y": source.points[0].y},
-                        {"x": source.points[1].x, "y": source.points[1].y}
-                    ],
-                    "agentCount": agent_count
-                })
-        
-        return processed_sources
-    
-    def _process_exit_points(self, exit_points: List[Element]) -> List[Dict[str, Any]]:
-        """
-        Process exit points for JuPedSim.
-        """
-        processed_exits = []
-        
-        for exit_point in exit_points:
-            if len(exit_point.points) == 2:
-                processed_exits.append({
-                    "id": exit_point.id,
-                    "line": [
-                        {"x": exit_point.points[0].x, "y": exit_point.points[0].y},
-                        {"x": exit_point.points[1].x, "y": exit_point.points[1].y}
-                    ]
-                })
-        
-        return processed_exits
-    
-    def _process_waypoints(self, waypoints: List[Element], all_elements: List[Element]) -> List[Dict[str, Any]]:
-        """
-        Process waypoints and their connections.
-        """
-        processed_waypoints = []
-        
-        for waypoint in waypoints:
-            if waypoint.points:
-                connections = []
-                
-                # Get connections if they exist
-                if waypoint.properties and waypoint.properties.connections:
-                    for target_id in waypoint.properties.connections:
-                        # Find target waypoint
-                        target = next((el for el in all_elements if el.id == target_id), None)
-                        if target and target.type == "WAYPOINT" and target.points:
-                            connections.append({
-                                "id": target_id,
-                                "position": {"x": target.points[0].x, "y": target.points[0].y}
-                            })
-                
-                processed_waypoints.append({
-                    "id": waypoint.id,
-                    "position": {"x": waypoint.points[0].x, "y": waypoint.points[0].y},
-                    "connections": connections
-                })
-        
-        return processed_waypoints
-    
-    def _generate_agents(self, geometry: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """
-        Generate agent data from start points, sources, and exit points.
-        """
-        agents = []
-        
-        # Process start points
-        for start_point in geometry["startPoints"]:
-            # Find nearest exit
-            nearest_exit = self._find_nearest_exit(start_point["position"], geometry["exitPoints"])
-            
-            agents.append({
-                "position": start_point["position"],
-                "destination": nearest_exit,
-                "radius": 0.3  # Default radius
-            })
-        
-        # Process sources
-        for source in geometry["sources"]:
-            agent_count = source.get("agentCount", 10)
-            
-            for i in range(agent_count):
-                # Generate random position within source rectangle
-                x = self._random_between(
-                    min(source["rect"][0]["x"], source["rect"][1]["x"]),
-                    max(source["rect"][0]["x"], source["rect"][1]["x"])
-                )
-                y = self._random_between(
-                    min(source["rect"][0]["y"], source["rect"][1]["y"]),
-                    max(source["rect"][0]["y"], source["rect"][1]["y"])
-                )
-                
-                # Find nearest exit
-                nearest_exit = self._find_nearest_exit({"x": x, "y": y}, geometry["exitPoints"])
-                
-                agents.append({
-                    "position": {"x": x, "y": y},
-                    "destination": nearest_exit,
-                    "radius": self._random_between(0.25, 0.35)  # Random radius
-                })
-        
-        return agents
-    
-    def _find_nearest_exit(self, position: Dict[str, float], exits: List[Dict[str, Any]]) -> Dict[str, float]:
-        """
-        Find the nearest exit point to a given position.
-        """
-        if not exits:
-            return {"x": 400, "y": 300}  # Default if no exits
-        
-        nearest_exit = None
+        nearest_door = None
         min_distance = float('inf')
         
-        for exit_point in exits:
-            # Calculate midpoint of exit line
-            if "line" in exit_point and len(exit_point["line"]) >= 2:
-                exit_x = (exit_point["line"][0]["x"] + exit_point["line"][1]["x"]) / 2
-                exit_y = (exit_point["line"][0]["y"] + exit_point["line"][1]["y"]) / 2
+        for door in doors:
+            if len(door.points) < 2:
+                continue
                 
-                # Calculate distance
-                dx = exit_x - position["x"]
-                dy = exit_y - position["y"]
-                distance = math.sqrt(dx*dx + dy*dy)
+            # Calculate door center
+            door_center = Point(
+                x=(door.points[0].x + door.points[1].x) / 2,
+                y=(door.points[0].y + door.points[1].y) / 2
+            )
+            
+            dist = self.calculate_distance(point, door_center)
+            if dist < min_distance:
+                min_distance = dist
+                nearest_door = door
                 
-                if distance < min_distance:
-                    min_distance = distance
-                    nearest_exit = {"x": exit_x, "y": exit_y}
-        
-        return nearest_exit or {"x": exits[0]["line"][0]["x"], "y": exits[0]["line"][0]["y"]}
+        return nearest_door
     
-    def _random_between(self, min_val: float, max_val: float) -> float:
+    def find_path_between_rooms(
+        self, 
+        start_room: Element, 
+        end_room: Element, 
+        doors: List[Element]
+    ) -> List[Tuple[Element, Element]]:
         """
-        Generate a random float between min_val and max_val.
+        Find a path between two rooms through doors.
+        
+        Returns:
+            List of (door, room) tuples representing the path
         """
-        import random
-        return min_val + random.random() * (max_val - min_val)
+        # Simple BFS to find path
+        visited = {start_room.id}
+        queue = [(start_room, [])]
+        
+        while queue:
+            current_room, path = queue.pop(0)
+            
+            # If we've reached the end room, return the path
+            if current_room.id == end_room.id:
+                return path
+            
+            # Find doors connected to this room
+            connected_doors = [
+                door for door in doors 
+                if door.properties and (
+                    door.properties.roomId == current_room.id or 
+                    door.properties.targetRoomId == current_room.id
+                )
+            ]
+            
+            for door in connected_doors:
+                # Find the room on the other side of the door
+                other_room_id = None
+                if door.properties.roomId == current_room.id:
+                    other_room_id = door.properties.targetRoomId
+                else:
+                    other_room_id = door.properties.roomId
+                
+                # Skip if no other room or already visited
+                if not other_room_id or other_room_id in visited:
+                    continue
+                    
+                # Find the other room
+                other_room = next((r for r in [e for e in elements if e.type == "ROOM"] if r.id == other_room_id), None)
+                if not other_room:
+                    continue
+                    
+                # Add to visited and queue
+                visited.add(other_room_id)
+                queue.append((other_room, path + [(door, other_room)]))
+        
+        # No path found
+        return []

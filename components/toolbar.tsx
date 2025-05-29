@@ -1,154 +1,118 @@
 "use client"
 
 import type React from "react"
-
-import { useSimulation } from "./SimulationContext"
+import { useState } from "react"
+import { useSimulationContext } from "@/components/SimulationContext"
 import { Button } from "@/components/ui/button"
-import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip"
-import {
-  MousePointer,
-  Pencil,
-  Circle,
-  ArrowRight,
-  Square,
-  Trash2,
-  CornerDownRight,
-  MapPin,
-  LayoutGrid,
-} from "lucide-react"
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
+import { Label } from "@/components/ui/label"
+import type { ElementType } from "@/types/simulationTypes"
+import { useSimulationLogic } from "@/hooks/useSimulationLogic"
+import { SimulationConfigPanel } from "@/components/simulation-config-panel"
+import { RoomEditor } from "@/components/room-editor"
 
-type ToolButtonProps = {
-  icon: React.ReactNode
-  label: string
-  active: boolean
-  onClick: () => void
-}
+export const Toolbar: React.FC = () => {
+  const { state, dispatch, setSimulationRunning, resetSimulation } = useSimulationContext()
+  const { config, updateConfig } = useSimulationLogic()
+  const [showConfigPanel, setShowConfigPanel] = useState(false)
+  const [showRoomEditor, setShowRoomEditor] = useState(false)
 
-function ToolButton({ icon, label, active, onClick }: ToolButtonProps) {
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Button
-          variant={active ? "default" : "outline"}
-          size="icon"
-          className={`h-10 w-10 ${active ? "bg-blue-600 hover:bg-blue-700" : ""}`}
-          onClick={onClick}
-        >
-          {icon}
-          <span className="sr-only">{label}</span>
-        </Button>
-      </TooltipTrigger>
-      <TooltipContent side="right">
-        <p>{label}</p>
-      </TooltipContent>
-    </Tooltip>
-  )
-}
+  const handleToolChange = (value: string) => {
+    dispatch({
+      type: "SET_SELECTED_TOOL",
+      payload: value as ElementType,
+    })
+  }
 
-export function Toolbar() {
-  const { selectedTool, setSelectedTool, geometryType, setGeometryType } = useSimulation()
+  const handleRunPause = () => {
+    setSimulationRunning(!state.simulationRunning)
+  }
+
+  const handleReset = () => {
+    resetSimulation()
+  }
 
   return (
-    <TooltipProvider>
-      <div className="absolute left-4 top-24 flex flex-col space-y-2 bg-white dark:bg-gray-800 p-2 rounded-lg shadow-md border">
-        <ToolButton
-          icon={<MousePointer className="h-5 w-5" />}
-          label="Select"
-          active={selectedTool === "SELECT"}
-          onClick={() => setSelectedTool("SELECT")}
-        />
-        <div className="h-px bg-gray-200 dark:bg-gray-700 w-full my-1" />
+    <div className="p-4 bg-white border-b">
+      <div className="flex flex-wrap gap-4 items-center">
+        <div>
+          <RadioGroup
+            value={state.selectedTool || "select"}
+            onValueChange={handleToolChange}
+            className="flex space-x-2"
+          >
+            <div className="flex items-center space-x-1">
+              <RadioGroupItem value="select" id="select" />
+              <Label htmlFor="select">Select</Label>
+            </div>
+            <div className="flex items-center space-x-1">
+              <RadioGroupItem value="agent" id="agent" />
+              <Label htmlFor="agent">Agent</Label>
+            </div>
+            <div className="flex items-center space-x-1">
+              <RadioGroupItem value="source" id="source" />
+              <Label htmlFor="source">Source</Label>
+            </div>
+            <div className="flex items-center space-x-1">
+              <RadioGroupItem value="exit" id="exit" />
+              <Label htmlFor="exit">Exit</Label>
+            </div>
+            <div className="flex items-center space-x-1">
+              <RadioGroupItem value="obstacle" id="obstacle" />
+              <Label htmlFor="obstacle">Obstacle</Label>
+            </div>
+            <div className="flex items-center space-x-1">
+              <RadioGroupItem value="waypoint" id="waypoint" />
+              <Label htmlFor="waypoint">Waypoint</Label>
+            </div>
+            <div className="flex items-center space-x-1">
+              <RadioGroupItem value="room" id="room" />
+              <Label htmlFor="room">Room</Label>
+            </div>
+            <div className="flex items-center space-x-1">
+              <RadioGroupItem value="door" id="door" />
+              <Label htmlFor="door">Door</Label>
+            </div>
+          </RadioGroup>
+        </div>
 
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant={geometryType === "STREET_LINE" ? "default" : "outline"}
-              size="icon"
-              className={`h-10 w-10 ${
-                selectedTool === "STREET_LINE" && geometryType === "STREET_LINE" ? "bg-blue-600 hover:bg-blue-700" : ""
-              }`}
-              onClick={() => {
-                setGeometryType("STREET_LINE")
-                setSelectedTool("STREET_LINE")
-              }}
-            >
-              <LayoutGrid className="h-5 w-5" />
-              <span className="sr-only">Street Lines</span>
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="right">
-            <p>Street Lines (Grid-based walkable areas)</p>
-          </TooltipContent>
-        </Tooltip>
-
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant={geometryType === "FREE_LINE" ? "default" : "outline"}
-              size="icon"
-              className={`h-10 w-10 ${
-                selectedTool === "FREE_LINE" && geometryType === "FREE_LINE" ? "bg-blue-600 hover:bg-blue-700" : ""
-              }`}
-              onClick={() => {
-                setGeometryType("FREE_LINE")
-                setSelectedTool("FREE_LINE")
-              }}
-            >
-              <Pencil className="h-5 w-5" />
-              <span className="sr-only">Free Lines</span>
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="right">
-            <p>Free Lines (Custom walkable areas)</p>
-          </TooltipContent>
-        </Tooltip>
-
-        <div className="h-px bg-gray-200 dark:bg-gray-700 w-full my-1" />
-
-        <ToolButton
-          icon={<Circle className="h-5 w-5" />}
-          label="Start Point"
-          active={selectedTool === "START_POINT"}
-          onClick={() => setSelectedTool("START_POINT")}
-        />
-
-        <ToolButton
-          icon={<CornerDownRight className="h-5 w-5" />}
-          label="Source Rectangle"
-          active={selectedTool === "SOURCE_RECTANGLE"}
-          onClick={() => setSelectedTool("SOURCE_RECTANGLE")}
-        />
-
-        <ToolButton
-          icon={<ArrowRight className="h-5 w-5" />}
-          label="Exit Point"
-          active={selectedTool === "EXIT_POINT"}
-          onClick={() => setSelectedTool("EXIT_POINT")}
-        />
-
-        <ToolButton
-          icon={<Square className="h-5 w-5" />}
-          label="Obstacle"
-          active={selectedTool === "OBSTACLE"}
-          onClick={() => setSelectedTool("OBSTACLE")}
-        />
-
-        <ToolButton
-          icon={<MapPin className="h-5 w-5" />}
-          label="Waypoint"
-          active={selectedTool === "WAYPOINT"}
-          onClick={() => setSelectedTool("WAYPOINT")}
-        />
-
-        <div className="h-px bg-gray-200 dark:bg-gray-700 w-full my-1" />
-
-        <ToolButton
-          icon={<Trash2 className="h-5 w-5" />}
-          label="Delete"
-          active={selectedTool === "DELETE"}
-          onClick={() => setSelectedTool("DELETE")}
-        />
+        <div className="flex space-x-2 ml-auto">
+          <Button variant="outline" onClick={() => setShowRoomEditor(true)}>
+            Room Editor
+          </Button>
+          <Button variant="outline" onClick={() => setShowConfigPanel(true)}>
+            Config
+          </Button>
+          <Button variant="outline" onClick={handleReset}>
+            Reset
+          </Button>
+          <Button variant={state.simulationRunning ? "destructive" : "default"} onClick={handleRunPause}>
+            {state.simulationRunning ? "Pause" : "Run"}
+          </Button>
+        </div>
       </div>
-    </TooltipProvider>
+
+      {showConfigPanel && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="max-w-md w-full">
+            <SimulationConfigPanel
+              config={config}
+              onUpdateConfig={updateConfig}
+              onClose={() => setShowConfigPanel(false)}
+            />
+          </div>
+        </div>
+      )}
+
+      {showRoomEditor && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="max-w-md w-full">
+            <RoomEditor onClose={() => setShowRoomEditor(false)} />
+          </div>
+        </div>
+      )}
+    </div>
   )
 }
+
+export default Toolbar

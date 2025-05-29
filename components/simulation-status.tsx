@@ -1,6 +1,6 @@
 "use client"
 
-import { useSimulation } from "./SimulationContext"
+import { useSimulation } from "./simulation-context"
 import { Button } from "@/components/ui/button"
 import { Play, Pause, RotateCcw } from "lucide-react"
 import { Progress } from "@/components/ui/progress"

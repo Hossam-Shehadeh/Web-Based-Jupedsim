@@ -8,11 +8,135 @@ import { Slider } from "@/components/ui/slider"
 import { ZoomIn, ZoomOut, Move, Play, Pause } from "lucide-react"
 import { ElementProperties } from "./ElementProperties"
 import { useSimulationLogic } from "../hooks/useSimulationLogic"
-import { drawCanvas } from "../utils/canvasDrawing"
-import { handleMouseInteractions } from "../utils/mouseInteractions"
 import type { Element } from "../types/simulationTypes"
+import type { Agent, Point } from "../types/simulationTypes"
+import { handleMouseInteractions } from "../utils/canvasUtils"
 
 const GRID_SIZE = 50
+
+// Fix the drawCanvas function to properly handle the grid background
+export function drawCanvas(
+  canvas: HTMLCanvasElement,
+  {
+    elements,
+    agents,
+    scale,
+    offset,
+    isSimulationRunning,
+    simulationSpeed,
+    simulationTime,
+  }: {
+    elements: Element[]
+    agents: Agent[]
+    scale: number
+    offset: Point
+    isSimulationRunning: boolean
+    simulationSpeed: number
+    simulationTime: number
+  },
+) {
+  const ctx = canvas.getContext("2d")
+  if (!ctx) return
+
+  // Clear canvas
+  ctx.clearRect(0, 0, canvas.width, canvas.height)
+
+  // Apply transformations
+  ctx.save()
+  ctx.translate(offset.x, offset.y)
+  ctx.scale(scale, scale)
+
+  // Draw grid first (so it's behind everything)
+  drawGrid(ctx, canvas, scale, offset)
+
+  // Draw elements
+  elements.forEach((element) => drawElement(ctx, element, scale))
+
+  // Draw agents
+  drawAgents(ctx, agents, scale, simulationSpeed)
+
+  // Display simulation info
+  if (isSimulationRunning) {
+    drawSimulationInfo(ctx, scale, simulationSpeed, agents.length, simulationTime)
+  }
+
+  ctx.restore()
+}
+
+function drawGrid(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, scale: number, offset: Point) {
+  const gridSize = 50
+  const gridOffsetX = offset.x % (gridSize * scale)
+  const gridOffsetY = offset.y % (gridSize * scale)
+
+  ctx.beginPath()
+  ctx.strokeStyle = "#e5e7eb"
+  ctx.lineWidth = 0.5 / scale
+
+  // Draw vertical grid lines
+  for (let x = gridOffsetX / scale; x < canvas.width / scale; x += gridSize) {
+    ctx.moveTo(x, 0)
+    ctx.lineTo(x, canvas.height / scale)
+  }
+
+  // Draw horizontal grid lines
+  for (let y = gridOffsetY / scale; y < canvas.height / scale; y += gridSize) {
+    ctx.moveTo(0, y)
+    ctx.lineTo(canvas.width / scale, y)
+  }
+
+  ctx.stroke()
+}
+
+// Fix the drawAgents function to handle simulation speed
+function drawAgents(ctx: CanvasRenderingContext2D, agents: Agent[], scale: number, simulationSpeed: number) {
+  agents.forEach((agent) => {
+    // Draw agent body
+    ctx.fillStyle = "rgba(255, 0, 0, 0.7)"
+    ctx.beginPath()
+    ctx.arc(agent.position.x, agent.position.y, agent.radius, 0, Math.PI * 2)
+    ctx.fill()
+
+    // Add a white border to make agents more visible
+    ctx.strokeStyle = "#ffffff"
+    ctx.lineWidth = 0.5 / scale
+    ctx.stroke()
+
+    // Remove the velocity indicator code
+    // if (agent.velocity && simulationSpeed > 0 && (agent.velocity.x !== 0 || agent.velocity.y !== 0)) {
+    //   const speed = Math.sqrt(agent.velocity.x * agent.velocity.x + agent.velocity.y * agent.velocity.y)
+    //   if (speed > 0) {
+    //     const dirX = agent.velocity.x / speed
+    //     const dirY = agent.velocity.y / speed
+    //
+    //     ctx.strokeStyle = "#ffffff"
+    //     ctx.lineWidth = 1.5 / scale
+    //     ctx.beginPath()
+    //     ctx.moveTo(agent.position.x, agent.position.y)
+    //     ctx.lineTo(agent.position.x + dirX * agent.radius * 1.5, agent.position.y + dirY * agent.radius * 1.5)
+    //     ctx.stroke()
+    //   }
+    // }
+  })
+}
+
+function drawElement(ctx: CanvasRenderingContext2D, element: Element, scale: number) {
+  ctx.fillStyle = element.color
+  ctx.fillRect(element.x, element.y, element.width, element.height)
+}
+
+function drawSimulationInfo(
+  ctx: CanvasRenderingContext2D,
+  scale: number,
+  simulationSpeed: number,
+  agentCount: number,
+  simulationTime: number,
+) {
+  ctx.fillStyle = "black"
+  ctx.font = `${14 / scale}px sans-serif`
+  ctx.fillText(`Speed: ${simulationSpeed.toFixed(1)}x`, 10, 20)
+  ctx.fillText(`Agents: ${agentCount}`, 10, 40)
+  ctx.fillText(`Time: ${simulationTime.toFixed(1)}s`, 10, 60)
+}
 
 export default function SimulationCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
