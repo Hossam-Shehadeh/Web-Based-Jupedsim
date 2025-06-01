@@ -15,7 +15,7 @@ This is the backend for the JuPedSim Web application, which provides a REST API 
 - Python 3.8+
 - FastAPI
 - Uvicorn
-- JuPedSim (optional)
+- JuPedSim
 
 ## Installation
 
